@@ -6,7 +6,7 @@ from datetime import datetime
 import discord
 
 intents = discord.Intents.default()
-intents.members = True  # needed for on_member_join + roles
+intents.members = True 
 
 bot = discord.Bot(intents=intents)
 
