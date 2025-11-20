@@ -175,24 +175,30 @@ async def remove_birthday_for(ctx, member: discord.Option(discord.Member, "Membe
 async def request_cmd(ctx, title: discord.Option(str, "Movie or show title", required=True)):
     if MOVIE_REQUESTS_CHANNEL_ID == 0:
         return await ctx.respond("Movie requests channel is not configured.", ephemeral=True)
+
     channel = bot.get_channel(MOVIE_REQUESTS_CHANNEL_ID)
     if not channel:
         return await ctx.respond("Configured movie requests channel not found.", ephemeral=True)
+
     embed = discord.Embed(
-        title="{title}",
+        title=title,  # <-- THIS WORKS
         description=(
             f"Requested by {ctx.author.mention}\n\n"
             "[REQUEST A TITLE HERE](https://discord.com/channels/1205041211610501120/1440989357535395911)"
         ),
         color=0x2e2f33,
     )
+
     msg = await channel.send(embed=embed)
+
     try:
         await msg.add_reaction("👍")
         await msg.add_reaction("👎")
     except:
         pass
+
     await ctx.respond("Your request has been posted for voting.", ephemeral=True)
+
 
 @bot.event
 async def on_ready():
