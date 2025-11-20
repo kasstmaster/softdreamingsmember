@@ -179,9 +179,8 @@ async def request_cmd(ctx, title: discord.Option(str, "Movie or show title", req
     if not channel:
         return await ctx.respond("Configured movie requests channel not found.", ephemeral=True)
     embed = discord.Embed(
-        title="New Watch Request",
+        title="{title}",
         description=(
-            f"**Title:** {title}\n"
             f"Requested by {ctx.author.mention}\n\n"
             "[REQUEST A TITLE HERE](https://discord.com/channels/1205041211610501120/1440989357535395911)"
         ),
