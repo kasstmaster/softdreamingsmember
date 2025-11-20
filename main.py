@@ -192,8 +192,8 @@ async def request_cmd(ctx, title: discord.Option(str, "Movie or show title", req
     msg = await channel.send(embed=embed)
 
     try:
-        await msg.add_reaction("👍")
-        await msg.add_reaction("👎")
+        await msg.add_reaction("✅")
+        await msg.add_reaction("🚫")
     except:
         pass
 
