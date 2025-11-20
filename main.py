@@ -116,7 +116,7 @@ async def get_guild_birthdays(guild_id: int) -> dict:
 
 async def build_birthday_embed(guild: discord.Guild) -> discord.Embed:
     birthdays = await get_guild_birthdays(guild.id)
-    embed = discord.Embed(title="Use </set:1440919374310408234> to share your birthday", color=0x2e2f33)
+    embed = discord.Embed(title="Our Birthdays!", color=0x2e2f33)
 
     if not birthdays:
         embed.description = "No birthdays have been set yet."
