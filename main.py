@@ -212,7 +212,7 @@ async def on_member_join(member):
         await member.send(
             """Hey, welcome to the server. Feel free to add your birthday in the channel below so we can all celebrate.
 
-https://discord.com/channels/1205041211610501120/1435375785220243598"""
+https://discord.com/channels/1205041211610501120/1440989357535395911/1440989655515271248"""
         )
     except:
         pass
