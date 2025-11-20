@@ -137,10 +137,18 @@ async def build_birthday_embed(guild: discord.Guild) -> discord.Embed:
         )
         return embed
 
+    # birthdays dict = { user_id: "MM-DD" }
     # Sort by MM-DD
-    sorted_items = sorted(birthdays.items(), key=lambda x: x[1])
+    sorted_items = sorted(
+        birthdays.items(),  # yields (user_id, mm_dd)
+        key=lambda x: x[1]  # sort by date
+    )
 
-    lines = [f"`{mm_dd}` — <@{user_id}>" for user_id, mm_dd in sorted_items]
+    lines = []
+    for user_id, mm_dd in sorted_items:
+        member = guild.get_member(int(user_id))
+        name = member.display_name if member else f"User {user_id}"
+        lines.append(f"`{mm_dd}` — **{name}**")
 
     lines.append("")
     lines.append("Use </set:1440919374310408234> to share your birthday")
