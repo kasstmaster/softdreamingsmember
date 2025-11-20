@@ -119,7 +119,11 @@ async def build_birthday_embed(guild: discord.Guild) -> discord.Embed:
     embed = discord.Embed(title="Our Birthdays!", color=0x2e2f33)
 
     if not birthdays:
-        embed.description = "No birthdays have been set yet."
+        # Optional: still show the hint even if list is empty
+        embed.description = (
+            "No birthdays have been set yet.\n\n"
+            "Use </set:1440919374310408234> to share your birthday"
+        )
         return embed
 
     items = []
@@ -129,6 +133,11 @@ async def build_birthday_embed(guild: discord.Guild) -> discord.Embed:
     items.sort(key=lambda x: x[0])  # sort by MM-DD
 
     lines = [f"`{mm_dd}` — <@{user_id}>" for mm_dd, user_id in items]
+
+    # blank line + hint under the list
+    lines.append("")
+    lines.append("Use </set:1440919374310408234> to share your birthday")
+
     embed.description = "\n".join(lines)
     return embed
 
