@@ -4,8 +4,7 @@ import asyncio
 from datetime import datetime
 
 import discord
-import random  # for random picks
-import math    # for pagination
+import random
 
 intents = discord.Intents.default()
 intents.members = True
@@ -18,47 +17,15 @@ BIRTHDAY_LIST_CHANNEL_ID = 1440989357535395911
 BIRTHDAY_LIST_MESSAGE_ID = 1440989655515271248
 MOVIE_REQUESTS_CHANNEL_ID = int(os.getenv("MOVIE_REQUESTS_CHANNEL_ID", "0"))
 
-# New: separate storage channels for movies / TV shows
+# Separate storage channels for movies / TV shows
 MOVIE_STORAGE_CHANNEL_ID = int(os.getenv("MOVIE_STORAGE_CHANNEL_ID", "0"))
 TV_STORAGE_CHANNEL_ID    = int(os.getenv("TV_STORAGE_CHANNEL_ID", "0"))
 
 storage_message_id: int | None = None
 
-# In-memory media lists
+# In-memory media lists (loaded from channels on startup)
 movie_titles: list[str] = []
 tv_titles: list[str] = []
-
-# ────────────────────── RAW MASTER MEDIA LIST (YOUR FULL LIST) ──────────────────────
-# (keep your RAW_MEDIA_LIST definition here)
-
-SECTION_HEADERS = {
-    "0-A",
-    "A","B","C","D","E","F","G","H","I","J","K",
-    "L","M","N","O","P","Q","R","S","T","U","V",
-    "W","X","Y","Z"
-}
-
-def parse_default_media():
-    movies: list[str] = []
-    shows: list[str] = []
-
-    for raw_line in RAW_MEDIA_LIST.splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-        if line in SECTION_HEADERS:
-            continue
-
-        if " - TV SHOW" in line:
-            title = line.replace(" - TV SHOW", "").strip()
-            if title:
-                shows.append(title)
-        else:
-            movies.append(line)
-
-    return movies, shows
-
-DEFAULT_MOVIES, DEFAULT_SHOWS = parse_default_media()
 
 # ────────────────────── BIRTHDAY STORAGE ──────────────────────
 
@@ -126,27 +93,17 @@ async def _load_titles_from_channel(channel_id: int) -> list[str]:
         print(f"[Media] No permission to read history in channel {channel_id}.")
         return []
 
-    return titles
+    # Sort and dedupe
+    return sorted(set(titles), key=str.lower)
+
 
 async def initialize_media_lists():
-    """Load movies and TV shows from their storage channels into memory.
-       If a storage channel is empty, seed it from DEFAULT_MOVIES / DEFAULT_SHOWS.
-       Always keep in-memory lists sorted alphabetically.
-    """
+    """Load movies and TV shows from their storage channels into memory."""
     global movie_titles, tv_titles
 
     # Movies
     if MOVIE_STORAGE_CHANNEL_ID != 0:
         movie_titles = await _load_titles_from_channel(MOVIE_STORAGE_CHANNEL_ID)
-        ch = bot.get_channel(MOVIE_STORAGE_CHANNEL_ID)
-        if not movie_titles and isinstance(ch, discord.TextChannel):
-            print("[Media] Movie storage empty, seeding from default list.")
-            for title in DEFAULT_MOVIES:
-                await ch.send(title)
-            movie_titles = list(DEFAULT_MOVIES)
-
-        # Sort and dedupe
-        movie_titles = sorted(set(movie_titles), key=str.lower)
         print(f"[Media] Movies loaded: {len(movie_titles)}")
     else:
         print("[Media] MOVIE_STORAGE_CHANNEL_ID is 0 (movies disabled).")
@@ -154,72 +111,9 @@ async def initialize_media_lists():
     # TV shows
     if TV_STORAGE_CHANNEL_ID != 0:
         tv_titles = await _load_titles_from_channel(TV_STORAGE_CHANNEL_ID)
-        ch = bot.get_channel(TV_STORAGE_CHANNEL_ID)
-        if not tv_titles and isinstance(ch, discord.TextChannel):
-            print("[Media] TV storage empty, seeding from default list.")
-            for title in DEFAULT_SHOWS:
-                await ch.send(title)
-            tv_titles = list(DEFAULT_SHOWS)
-
-        # Sort and dedupe
-        tv_titles = sorted(set(tv_titles), key=str.lower)
         print(f"[Media] TV shows loaded: {len(tv_titles)}")
     else:
         print("[Media] TV_STORAGE_CHANNEL_ID is 0 (shows disabled).")
-
-# ────────────────────── MEDIA PAGINATION VIEW (PREV/NEXT BUTTONS) ──────────────────────
-
-class MediaPageView(discord.ui.View):
-    def __init__(self, items: list[str], category: str, per_page: int = 25):
-        super().__init__(timeout=120)
-        self.items = items
-        self.category = category  # "movies" or "shows"
-        self.per_page = per_page
-        self.total_pages = max(1, math.ceil(len(items) / per_page))
-        self.page = 0
-
-    def _page_text(self) -> str:
-        start = self.page * self.per_page
-        end = start + self.per_page
-        page_items = self.items[start:end]
-
-        if not page_items:
-            body = "No items on this page."
-        else:
-            # Keep global numbering (1..N)
-            lines = [
-                f"{i+1}. {title}"
-                for i, title in enumerate(page_items, start)
-            ]
-            body = "\n".join(lines)
-
-        header = f"{self.category.capitalize()} list (page {self.page+1}/{self.total_pages})"
-        return f"{header}\n```text\n{body}\n```"
-
-    def _sync_buttons(self):
-        # Disable prev/next at ends
-        for child in self.children:
-            if isinstance(child, discord.ui.Button):
-                if child.custom_id == "media_prev":
-                    child.disabled = (self.page == 0)
-                elif child.custom_id == "media_next":
-                    child.disabled = (self.page >= self.total_pages - 1)
-
-    @discord.ui.button(label="◀ Prev", style=discord.ButtonStyle.secondary, custom_id="media_prev")
-    async def prev_page(self, button: discord.ui.Button, interaction: discord.Interaction):
-        if self.page == 0:
-            return await interaction.response.defer()
-        self.page -= 1
-        self._sync_buttons()
-        await interaction.response.edit_message(content=self._page_text(), view=self)
-
-    @discord.ui.button(label="Next ▶", style=discord.ButtonStyle.secondary, custom_id="media_next")
-    async def next_page(self, button: discord.ui.Button, interaction: discord.Interaction):
-        if self.page >= self.total_pages - 1:
-            return await interaction.response.defer()
-        self.page += 1
-        self._sync_buttons()
-        await interaction.response.edit_message(content=self._page_text(), view=self)
 
 # ────────────────────── BIRTHDAY HELPERS ──────────────────────
 
@@ -279,6 +173,73 @@ async def update_birthday_list_message(guild: discord.Guild):
         print("Birthday list updated.")
     except Exception as e:
         print("Failed to update list:", e)
+
+# ────────────────────── MEDIA PAGER VIEW ──────────────────────
+
+PAGE_SIZE = 25  # titles per page
+
+class MediaPagerView(discord.ui.View):
+    def __init__(self, category: str, page: int = 0, page_size: int = PAGE_SIZE):
+        super().__init__(timeout=120)
+        self.category = category  # "movies" or "shows"
+        self.page = page
+        self.page_size = page_size
+
+    def _items(self) -> list[str]:
+        return movie_titles if self.category == "movies" else tv_titles
+
+    def _max_page(self) -> int:
+        items = self._items()
+        if not items:
+            return 0
+        return (len(items) - 1) // self.page_size
+
+    def _update_buttons_state(self):
+        max_page = self._max_page()
+        if hasattr(self, "prev_button"):
+            self.prev_button.disabled = self.page <= 0
+        if hasattr(self, "next_button"):
+            self.next_button.disabled = self.page >= max_page
+
+    def _build_page_content(self) -> str:
+        items = self._items()
+        if not items:
+            return "No items."
+
+        max_page = self._max_page()
+        # Clamp page just in case list size changed
+        self.page = max(0, min(self.page, max_page))
+
+        start = self.page * self.page_size
+        end = start + self.page_size
+        slice_items = items[start:end]
+
+        lines = [f"{i+1}. {title}" for i, title in enumerate(slice_items, start=start)]
+        body = "\n".join(lines) if lines else "No items on this page."
+
+        header = (
+            f"{self.category.capitalize()} list — page {self.page+1}/{max_page+1} "
+            f"(total {len(items)})"
+        )
+
+        self._update_buttons_state()
+        return f"{header}\n```text\n{body}\n```"
+
+    async def send_initial(self, ctx: discord.ApplicationContext):
+        content = self._build_page_content()
+        await ctx.respond(content, view=self, ephemeral=True)
+
+    @discord.ui.button(label="◀ Prev", style=discord.ButtonStyle.secondary)
+    async def prev_button(self, button: discord.ui.Button, interaction: discord.Interaction):
+        self.page -= 1
+        content = self._build_page_content()
+        await interaction.response.edit_message(content=content, view=self)
+
+    @discord.ui.button(label="Next ▶", style=discord.ButtonStyle.secondary)
+    async def next_button(self, button: discord.ui.Button, interaction: discord.Interaction):
+        self.page += 1
+        content = self._build_page_content()
+        await interaction.response.edit_message(content=content, view=self)
 
 # ────────────────────── SLASH COMMANDS ──────────────────────
 
@@ -363,23 +324,18 @@ async def request_cmd(ctx, title: discord.Option(str, "Movie or show title", req
 
 @bot.slash_command(
     name="media_list",
-    description="Browse stored movies or TV shows with Prev/Next buttons (ephemeral)"
+    description="Browse stored movies or TV shows (ephemeral, paged)"
 )
 async def media_list(
     ctx: discord.ApplicationContext,
     category: discord.Option(str, "Which list?", choices=["movies", "shows"], required=True),
 ):
     items = movie_titles if category == "movies" else tv_titles
-
     if not items:
         return await ctx.respond(f"No {category} stored.", ephemeral=True)
 
-    # Always sorted, deduped
-    items = sorted(set(items), key=str.lower)
-
-    view = MediaPageView(items=items, category=category)
-    view._sync_buttons()
-    await ctx.respond(view._page_text(), view=view, ephemeral=True)
+    view = MediaPagerView(category=category)
+    await view.send_initial(ctx)
 
 @bot.slash_command(
     name="media_random",
@@ -396,7 +352,7 @@ async def media_random(
 
     choice_title = random.choice(items)
     kind = "movie" if category == "movies" else "show"
-    await ctx.respond(f"🎲 Random {kind}: **{choice_title}**")
+    await ctx.respond(f"🎲 Random {kind}: **{choice_title}**", ephemeral=True)
 
 @bot.slash_command(
     name="media_add",
@@ -453,7 +409,7 @@ async def media_add(
 async def on_ready():
     print(f"{bot.user} is online (birthday bot).")
     await initialize_storage_message()
-    await initialize_media_lists()   # ← load / seed movies & shows
+    await initialize_media_lists()
     bot.loop.create_task(birthday_checker())
 
 @bot.event
