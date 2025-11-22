@@ -1,10 +1,10 @@
-
 import os
 import json
 import asyncio
 from datetime import datetime
 
 import discord
+import random  # ← for random picks
 
 intents = discord.Intents.default()
 intents.members = True 
@@ -17,7 +17,18 @@ BIRTHDAY_LIST_CHANNEL_ID = 1440989357535395911
 BIRTHDAY_LIST_MESSAGE_ID = 1440989655515271248
 MOVIE_REQUESTS_CHANNEL_ID = int(os.getenv("MOVIE_REQUESTS_CHANNEL_ID", "0"))
 
+# New: separate storage channels for movies / TV shows
+MOVIE_STORAGE_CHANNEL_ID = int(os.getenv("MOVIE_STORAGE_CHANNEL_ID", "0"))
+TV_STORAGE_CHANNEL_ID    = int(os.getenv("TV_STORAGE_CHANNEL_ID", "0"))
+
 storage_message_id: int | None = None
+
+# In-memory media lists
+movie_titles: list[str] = []
+tv_titles: list[str] = []
+
+
+# ────────────────────── BIRTHDAY STORAGE ──────────────────────
 
 async def initialize_storage_message():
     global storage_message_id
@@ -63,6 +74,46 @@ async def _save_storage_message(data: dict):
     if len(text) > 1900:
         text = text[:1900]
     await msg.edit(content=text)
+
+
+# ────────────────────── MEDIA (MOVIES / TV SHOWS) LISTS ──────────────────────
+
+async def _load_titles_from_channel(channel_id: int) -> list[str]:
+    """Read all non-empty messages from a channel and treat each as a title."""
+    ch = bot.get_channel(channel_id)
+    if not isinstance(ch, discord.TextChannel):
+        print(f"[Media] Channel {channel_id} not found or not a text channel.")
+        return []
+
+    titles: list[str] = []
+    try:
+        async for msg in ch.history(limit=None, oldest_first=True):
+            content = (msg.content or "").strip()
+            if content:
+                titles.append(content)
+    except discord.Forbidden:
+        print(f"[Media] No permission to read history in channel {channel_id}.")
+    return titles
+
+
+async def initialize_media_lists():
+    """Load movies and TV shows from their storage channels into memory."""
+    global movie_titles, tv_titles
+
+    if MOVIE_STORAGE_CHANNEL_ID != 0:
+        movie_titles = await _load_titles_from_channel(MOVIE_STORAGE_CHANNEL_ID)
+        print(f"[Media] Loaded {len(movie_titles)} movies.")
+    else:
+        print("[Media] MOVIE_STORAGE_CHANNEL_ID is 0 (disabled).")
+
+    if TV_STORAGE_CHANNEL_ID != 0:
+        tv_titles = await _load_titles_from_channel(TV_STORAGE_CHANNEL_ID)
+        print(f"[Media] Loaded {len(tv_titles)} TV shows.")
+    else:
+        print("[Media] TV_STORAGE_CHANNEL_ID is 0 (disabled).")
+
+
+# ────────────────────── BIRTHDAY HELPERS ──────────────────────
 
 def normalize_date(date_str: str):
     try:
@@ -120,6 +171,9 @@ async def update_birthday_list_message(guild: discord.Guild):
         print("Birthday list updated.")
     except Exception as e:
         print("Failed to update list:", e)
+
+
+# ────────────────────── SLASH COMMANDS ──────────────────────
 
 @bot.slash_command(name="set", description="Set your birthday (MM-DD)")
 async def set_birthday_self(ctx, date: discord.Option(str, "Format: MM-DD", required=True)):
@@ -180,7 +234,7 @@ async def request_cmd(ctx, title: discord.Option(str, "Movie or show title", req
         return await ctx.respond("Configured movie requests channel not found.", ephemeral=True)
 
     embed = discord.Embed(
-        title=title,  # <-- THIS WORKS
+        title=title,
         description=(
             f"Requested by {ctx.author.mention}\n\n"
             "**[REQUEST A TITLE](https://discord.com/channels/1205041211610501120/1440989357535395911/1440992347709243402)**"
@@ -199,10 +253,117 @@ async def request_cmd(ctx, title: discord.Option(str, "Movie or show title", req
     await ctx.respond("Your request has been posted for voting.", ephemeral=True)
 
 
+# ────────────────────── MEDIA COMMANDS ──────────────────────
+
+@bot.slash_command(
+    name="media_list",
+    description="List stored movies or TV shows (ephemeral)"
+)
+async def media_list(
+    ctx: discord.ApplicationContext,
+    category: discord.Option(str, "Which list?", choices=["movies", "shows"], required=True),
+):
+    items = movie_titles if category == "movies" else tv_titles
+
+    if not items:
+        return await ctx.respond(f"No {category} stored.", ephemeral=True)
+
+    lines = [f"{i+1}. {title}" for i, title in enumerate(items)]
+
+    chunks = []
+    current = []
+    length = 0
+
+    for line in lines:
+        if length + len(line) + 1 > 1900:
+            chunks.append("\n".join(current))
+            current = [line]
+            length = len(line) + 1
+        else:
+            current.append(line)
+            length += len(line) + 1
+
+    if current:
+        chunks.append("\n".join(current))
+
+    await ctx.respond(f"```\n{chunks[0]}\n```", ephemeral=True)
+
+    for chunk in chunks[1:]:
+        await ctx.followup.send(f"```\n{chunk}\n```", ephemeral=True)
+
+
+@bot.slash_command(
+    name="media_random",
+    description="Pick a random movie or TV show from the stored lists"
+)
+async def media_random(
+    ctx: discord.ApplicationContext,
+    category: discord.Option(str, "Which list?", choices=["movies", "shows"], required=True),
+):
+    items = movie_titles if category == "movies" else tv_titles
+
+    if not items:
+        return await ctx.respond(f"No {category} stored yet.", ephemeral=True)
+
+    choice = random.choice(items)
+    await ctx.respond(f"🎲 Random {category[:-1]}: **{choice}**")
+
+
+@bot.slash_command(
+    name="media_add",
+    description="Add a new movie or TV show to the stored lists"
+)
+async def media_add(
+    ctx: discord.ApplicationContext,
+    category: discord.Option(str, "Which list?", choices=["movies", "shows"], required=True),
+    title: discord.Option(str, "Exact title to add", required=True),
+):
+    # Admin / owner only
+    if not ctx.author.guild_permissions.administrator and ctx.guild.owner_id != ctx.author.id:
+        return await ctx.respond("You need Administrator.", ephemeral=True)
+
+    title = title.strip()
+    if not title:
+        return await ctx.respond("Title cannot be empty.", ephemeral=True)
+
+    global movie_titles, tv_titles
+
+    if category == "movies":
+        if MOVIE_STORAGE_CHANNEL_ID == 0:
+            return await ctx.respond("Movie storage channel is not configured.", ephemeral=True)
+        if title in movie_titles:
+            return await ctx.respond("That movie is already in the list.", ephemeral=True)
+
+        ch = bot.get_channel(MOVIE_STORAGE_CHANNEL_ID)
+        if not ch:
+            return await ctx.respond("Movie storage channel not found.", ephemeral=True)
+
+        await ch.send(title)
+        movie_titles.append(title)
+        await ctx.respond(f"Added **{title}** to movies.", ephemeral=True)
+
+    else:  # shows
+        if TV_STORAGE_CHANNEL_ID == 0:
+            return await ctx.respond("TV storage channel is not configured.", ephemeral=True)
+        if title in tv_titles:
+            return await ctx.respond("That show is already in the list.", ephemeral=True)
+
+        ch = bot.get_channel(TV_STORAGE_CHANNEL_ID)
+        if not ch:
+            return await ctx.respond("TV storage channel not found.", ephemeral=True)
+
+        await ch.send(title)
+        tv_titles.append(title)
+        await ctx.respond(f"Added **{title}** to TV shows.", ephemeral=True)
+
+
+# ────────────────────── EVENTS ──────────────────────
+
 @bot.event
 async def on_ready():
     print(f"{bot.user} is online (birthday bot).")
     await initialize_storage_message()
+    await initialize_media_lists()   # ← load movies / shows from their channels
     bot.loop.create_task(birthday_checker())
 
 @bot.event
