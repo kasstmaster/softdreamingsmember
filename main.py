@@ -815,9 +815,9 @@ async def on_ready():
     await initialize_media_lists()
     bot.loop.create_task(birthday_checker())
     
-    # ← THIS IS THE IMPORTANT PART — load the cog FIRST
+    # Load the QOTD cog (this registers /test_qotd and starts the daily task)
     if not bot.get_cog("QOTDCog"):
-        await bot.add_cog(QOTDCog(bot))   # ← now the /test_qotd command will register
+        await bot.add_cog(QOTDCog(bot))
     
     print("[QOTD] Question of the Day system loaded!")
 
@@ -932,19 +932,6 @@ class QOTDCog(commands.Cog):
     async def test_qotd(self, ctx):
         await ctx.respond("Fetching a fresh question...", ephemeral=True)
         await self.daily_qotd()
-
-# Add the cog when bot starts
-@bot.event
-async def on_ready():
-    print(f"{bot.user} is online (birthday bot).")
-    await initialize_storage_message()
-    await initialize_media_lists()
-    bot.loop.create_task(birthday_checker())
-    
-    # Add QOTD cog if not already added
-    if not bot.get_cog("QOTDCog"):
-        await bot.add_cog(QOTDCog(bot))
-    print("[QOTD] Question of the Day system loaded!")
     
 
 bot.run(os.getenv("TOKEN"))
