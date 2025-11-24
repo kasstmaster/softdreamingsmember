@@ -320,10 +320,9 @@ async def info(ctx: discord.ApplicationContext):
         inline=False
     )
 
-    embed.set_thumbnail(url=bot.user.display_avatar.url)
-    embed.set_footer(text=f"Requested by {ctx.author.display_name} • Bot by Soft Dreamings", icon_url=ctx.author.display_avatar.url)
-    embed.timestamp = datetime.utcnow()
-
+    embed.set_thumbnail(url=MEMBERS_ICON)
+    embed.set_footer(text=f"• Bot by Soft Dreamings", icon_url=MEMBERS_ICON)
+    
     await ctx.respond(embed=embed)
 
 
