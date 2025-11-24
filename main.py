@@ -859,82 +859,62 @@ async def birthday_checker():
         await asyncio.sleep(3600)
 
 
-# ────────────────────── QUESTION OF THE DAY (The Story Shack) ──────────────────────
+# ────────────────────── QUESTION OF THE DAY (SIMPLE VERSION – NO COG) ──────────────────────
 import requests
-from discord.ext import tasks, commands
+from discord.ext import tasks
 from datetime import time
 
-# ←←← CHANGE THESE TWO LINES ONLY ←←←
-QOTD_CHANNEL_ID = 1207917070684004452   # Your QOTD channel
-QOTD_TIME = time(9, 0)                  # 9:00 AM server time (change whenever)
+QOTD_CHANNEL_ID = 1207917070684004452   # ← change if you want
+QOTD_TIME = time(9, 0)                  # 9:00 AM
 
-class QOTDCog(commands.Cog):
-    def __init__(self, bot):
-        self.bot = bot
-        self.daily_qotd.start()
+@tasks.loop(time=QOTD_TIME)
+async def daily_qotd():
+    channel = bot.get_channel(QOTD_CHANNEL_ID)
+    if not channel:
+        return
 
-    def cog_unload(self):
-        self.daily_qotd.cancel()
-
-    @tasks.loop(time=QOTD_TIME)
-    async def daily_qotd(self):
-        channel = self.bot.get_channel(QOTD_CHANNEL_ID)
-        if not channel:
-            print(f"[QOTD] Channel {QOTD_CHANNEL_ID} not found!")
+    try:
+        r = requests.get("https://thestoryshack.com/tools/random-question-generator/", 
+                        headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
+        if r.status_code != 200:
             return
+        text = r.text
+        start = text.find('<h2>') + 4
+        end = text.find('</h2>', start)
+        question = text[start:end].strip()
+        if not question.endswith("?"):
+            question += "?"
 
-        try:
-            headers = {'User-Agent': 'Mozilla/5.0'}
-            resp = requests.get(
-                "https://thestoryshack.com/tools/random-question-generator/",
-                headers=headers, timeout=10
-            )
-            resp.raise_for_status()
+        embed = discord.Embed(title="Question of the Day",
+                            description=f"**{question}**",
+                            color=0x9b59b6)
+        embed.set_footer(text=f"{datetime.now().strftime('%B %d, %Y')} • Reply below!")
+        await channel.send(embed=embed)
+        print(f"[QOTD] Posted: {question}")
+    except Exception as e:
+        print(f"[QOTD] Error: {e}")
 
-            text = resp.text
-            start = text.find('<h2>') + 4
-            end = text.find('</h2>', start)
-            question = text[start:end].strip()
-            if not question.endswith("?"):
-                question += "?"
+@daily_qotd.before_loop
+async def before_qotd():
+    await bot.wait_until_ready()
 
-            embed = discord.Embed(
-                title="Question of the Day",
-                description=f"**{question}**",
-                color=0x9b59b6
-            )
-            embed.set_footer(text=f"{datetime.now().strftime('%B %d, %Y')} • Reply below!")
-            embed.set_thumbnail(url="https://thestoryshack.com/wp-content/uploads/2023/06/storyshack-favicon-150x150.png")
+# ←←← THIS IS THE MAGIC COMMAND THAT WILL DEFINITELY SHOW UP ←←←
+@bot.slash_command(name="test_qotd", description="Post a QOTD right now (admin only)")
+@commands.has_permissions(administrator=True)
+async def test_qotd(ctx):
+    await ctx.respond("Fetching question…", ephemeral=True)
+    await daily_qotd()   # just calls the same function
 
-            await channel.send(embed=embed)
-            print(f"[QOTD] Posted: {question}")
-
-        except Exception as e:
-            print(f"[QOTD] Error: {e}")
-
-    @daily_qotd.before_loop
-    async def before_qotd(self):
-        await self.bot.wait_until_ready()
-
-    @commands.slash_command(name="test_qotd", description="Manually post today's QOTD (admin only)")
-    @commands.has_permissions(administrator=True)
-    async def test_qotd(self, ctx):
-        await ctx.respond("Fetching a fresh question…", ephemeral=True)
-        await self.daily_qotd()
-
-# ←←← KEEP ONLY ONE on_ready (this is the only one in the file now) ←←←
+# Start the daily task
 @bot.event
 async def on_ready():
-    print(f"{bot.user} is online (birthday bot).")
+    print(f"{bot.user} is online!")
     await initialize_storage_message()
     await initialize_media_lists()
     bot.loop.create_task(birthday_checker())
-
-    # Load QOTD cog → this registers /test_qotd instantly
-    if "QOTDCog" not in bot.cogs:
-        await bot.add_cog(QOTDCog(bot))
-
-    print("[QOTD] Question of the Day system loaded + /test_qotd ready!")
+    
+    daily_qotd.start()          # ← starts the daily posting
+    print("[QOTD] Daily question system started – /test_qotd is ready!")
     
 
 bot.run(os.getenv("TOKEN"))
