@@ -276,9 +276,6 @@ async def request_title_autocomplete(ctx: "discord.AutocompleteContext"):
 
 @bot.slash_command(name="commands", description="Quick reference of admin-only commands")
 async def commands(ctx: discord.ApplicationContext):
-    # Optional: hide from non-admins (uncomment if you want it truly private)
-    # if not (ctx.author.guild_permissions.administrator or ctx.guild.owner_id == ctx.author.id):
-    #     return await ctx.respond("This command is only for staff.", ephemeral=True)
 
     embed = discord.Embed(
         title="Admin & Staff Commands",
@@ -304,8 +301,8 @@ async def commands(ctx: discord.ApplicationContext):
     embed.add_field(
         name="Holiday Themes",
         value=(
-            "• </holiday_add:NEW> – Apply Christmas or Halloween color roles\n"
-            "• </holiday_remove:NEW> – Remove all holiday color roles from everyone"
+            "• </holiday_add:1442616885802832115> – Apply Christmas or Halloween color roles\n"
+            "• </holiday_remove:1442616885802832115> – Remove all holiday color roles from everyone"
         ),
         inline=False
     )
@@ -362,8 +359,8 @@ async def info(ctx: discord.ApplicationContext):
     embed.add_field(
         name="Holiday Themes",
         value=(
-            "• </holiday_add:NEW> – Instantly apply festive color roles (Christmas = Grinch/Cranberry/Tinsel | Halloween = Cauldron/Candy/Witchy)\n"
-            "• </holiday_remove:NEW> – Remove all holiday color roles from everyone in one click\n"
+            "• </holiday_add:1442616885802832115> – Instantly apply festive color roles (Christmas = Grinch/Cranberry/Tinsel | Halloween = Cauldron/Candy/Witchy)\n"
+            "• </holiday_remove:1442616885802832115> – Remove all holiday color roles from everyone in one click\n"
             "Perfect for Christmas, Halloween, and future holidays!"
         ),
         inline=False
