@@ -274,6 +274,58 @@ async def request_title_autocomplete(ctx: "discord.AutocompleteContext"):
 
 # ────────────────────── SLASH COMMANDS ──────────────────────
 
+@bot.slash_command(name="info", description="Show all features of the bot")
+async def info(ctx: discord.ApplicationContext):
+    embed = discord.Embed(
+        title="Bot Features",
+        color=0x2e2f33
+    )
+
+    # ───── Birthday Features ─────
+    embed.add_field(
+        name="🎂 Birthday Features",
+        value=(
+            "- </set:1440919374310408234> – Let members set their own birthday (month + day)\n"
+            "- </set_for:1440919374310408235> – Admins can set someone else’s birthday\n"
+            "- </remove_for:1440954448468774922> – Admins can delete a member’s birthday\n"
+            "- </birthdays:1440919374310408236> – Show the full server birthday list (ephemeral)\n"
+            "• Automatically gives/removes a configurable “Birthday” role on the correct day (UTC)\n"
+            "• Maintains a public pinned birthday list that updates instantly\n"
+            "• Sends a welcome DM to new members with a link to add their birthday"
+        ),
+        inline=False
+    )
+
+    # ───── Movie/TV Night Features ─────
+    embed.add_field(
+        name="🎬 Movie/TV Night Features",
+        value=(
+            "• Stores separate movie and TV show libraries (loaded from dedicated channels)\n"
+            "- </list:1442017846589653014> movies or /list shows – Browse the full library with paginated view\n"
+            "- </pick:1442305353030176800> – Add a movie from the library to the current round’s temporary pool (with autocomplete)\n"
+            "- </pool:1442311836497350656> – See everything currently in the pick pool and who added it\n"
+            "- </random:1442017303230156963> – Randomly selects one movie from the pool, announces it publicly, then clears the pool\n"
+            "- </media_add:1441698665981939825> – Admins can permanently add new movies or shows to the library"
+        ),
+        inline=False
+    )
+
+    # ───── Utility / Admin ─────
+    embed.add_field(
+        name="🔧 Utility / Admin",
+        value=(
+            "- </say:1440927430209703986> – Make the bot speak in the current channel (admin only)\n"
+            "- </color:1442416784635334668> – Lets members with the “Dead Chat” role change that role’s color (hex or named colors)"
+        ),
+        inline=False
+    )
+
+    embed.set_footer(text=f"Requested by {ctx.author.display_name}", icon_url=ctx.author.display_avatar.url)
+    embed.timestamp = datetime.utcnow()
+
+    await ctx.respond(embed=embed)
+
+
 @bot.slash_command(name="set", description="Set your birthday")
 async def set_birthday_self(
     ctx: "discord.ApplicationContext",
