@@ -814,6 +814,12 @@ async def on_ready():
     await initialize_storage_message()
     await initialize_media_lists()
     bot.loop.create_task(birthday_checker())
+    
+    # ← THIS IS THE IMPORTANT PART — load the cog FIRST
+    if not bot.get_cog("QOTDCog"):
+        await bot.add_cog(QOTDCog(bot))   # ← now the /test_qotd command will register
+    
+    print("[QOTD] Question of the Day system loaded!")
 
 @bot.event
 async def on_member_join(member):
