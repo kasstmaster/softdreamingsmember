@@ -46,7 +46,6 @@ storage_message_id: int | None = None
 movie_titles: list[str] = []
 tv_titles: list[str] = []
 
-# Per-guild temporary request pool: guild_id -> list of (user_id, title)
 request_pool: dict[int, list[tuple[int, str]]] = {}
 
 # ────────────────────── BIRTHDAY STORAGE ──────────────────────
