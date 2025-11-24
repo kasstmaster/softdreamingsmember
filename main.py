@@ -276,6 +276,8 @@ async def request_title_autocomplete(ctx: "discord.AutocompleteContext"):
 
 @bot.slash_command(name="info", description="Show all features of the bot")
 async def info(ctx: discord.ApplicationContext):
+    MEMBERS_ICON = "https://images-ext-1.discordapp.net/external/2i-PtcLgl_msR0VTT2mGn_5dtQiC9DK56PxR4uJfCLI/%3Fsize%3D1024/https/cdn.discordapp.com/avatars/1440914703894188122/ff746b98459152a0ba7c4eff5530cd9d.png?format=webp&quality=lossless&width=534&height=534"
+
     embed = discord.Embed(
         title="Members - Bot Features",
         color=0x00e1ff
