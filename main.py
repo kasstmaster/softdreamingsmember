@@ -337,42 +337,9 @@ async def remove_birthday_for(
 
 @bot.slash_command(
     name="pick",
-    description="Randomly pick one movie from the current request pool and reset it"
+    description="Add a movie to the temporary pick pool"
 )
-async def pick_cmd(ctx: "discord.ApplicationContext"):
-    if not ctx.guild:
-        return await ctx.respond("This command can only be used in a server.", ephemeral=True)
-
-    guild_id = ctx.guild.id
-    pool = request_pool.get(guild_id, [])
-
-    if not pool:
-        return await ctx.respond(
-            "There are no requests in the pool yet.\n"
-            "Ask everyone to use `/request` first.",
-            ephemeral=True,
-        )
-
-    user_id, title = pyrandom.choice(pool)
-
-    # Reset the pool for this guild
-    request_pool[guild_id] = []
-
-    member = ctx.guild.get_member(user_id)
-    requester_display = member.mention if member else f"<@{user_id}>"
-
-    # Make the result public so everyone sees what was chosen
-    await ctx.respond(
-        f"🎲 Picked: **{title}**\n"
-        f"Requested by {requester_display}\n"
-        f"The pool has been cleared. Start a new round with `/request`."
-    )
-
-@bot.slash_command(
-    name="request",
-    description="Add a movie to the current random pick pool"
-)
-async def request_cmd(
+async def pick_cmd(
     ctx: "discord.ApplicationContext",
     title: discord.Option(
         str,
@@ -414,6 +381,40 @@ async def request_cmd(
         ephemeral=True,
     )
 
+
+@bot.slash_command(
+    name="random",
+    description="Choose a random movie from the current pool and reset it"
+)
+async def random_pick_cmd(ctx: "discord.ApplicationContext"):
+    if not ctx.guild:
+        return await ctx.respond("This command can only be used in a server.", ephemeral=True)
+
+    guild_id = ctx.guild.id
+    pool = request_pool.get(guild_id, [])
+
+    if not pool:
+        return await ctx.respond(
+            "There are no movies in the pool.\n"
+            "Use `/pick` to add movies first.",
+            ephemeral=True,
+        )
+
+    user_id, title = pyrandom.choice(pool)
+
+    # Reset the pool for this guild
+    request_pool[guild_id] = []
+
+    member = ctx.guild.get_member(user_id)
+    requester_display = member.mention if member else f"<@{user_id}>"
+
+    # Make the result public so everyone sees what was chosen
+    await ctx.respond(
+        f"🎲 Random Pick: **{title}**\n"
+        f"Requested by {requester_display}\n"
+        f"The pool has been cleared. Start a new round with `/pick`."
+    )
+
 # ────────────────────── MEDIA COMMANDS ──────────────────────
 
 @bot.slash_command(
@@ -430,24 +431,6 @@ async def list(
 
     view = MediaPagerView(category=category)
     await view.send_initial(ctx)
-
-@bot.slash_command(
-    name="random",
-    description="Pick a random movie or TV show from the list"
-)
-async def media_random(
-    ctx: "discord.ApplicationContext",
-    category: discord.Option(str, "Which list?", choices=["movies", "shows"], required=True),
-):
-    items = movie_titles if category == "movies" else tv_titles
-
-    if not items:
-        return await ctx.respond(f"No {category} stored yet.", ephemeral=True)
-
-    choice_title = pyrandom.choice(items)
-    kind = "movie" if category == "movies" else "show"
-
-    await ctx.respond(f"🎲 Random {kind}: **{choice_title}**")
 
 @bot.slash_command(
     name="media_add",
