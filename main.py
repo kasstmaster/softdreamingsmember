@@ -47,6 +47,9 @@ storage_message_id: int | None = None
 movie_titles: list[str] = []
 tv_titles: list[str] = []
 
+# Per-guild temporary request pool: guild_id -> list of (user_id, title)
+request_pool: dict[int, list[tuple[int, str]]] = {}
+
 # ────────────────────── BIRTHDAY STORAGE ──────────────────────
 
 async def initialize_storage_message():
@@ -332,7 +335,43 @@ async def remove_birthday_for(
     await update_birthday_list_message(ctx.guild)
     await ctx.respond(f"Removed birthday for {member.mention}.", ephemeral=True)
 
-@bot.slash_command(name="request", description="Request a movie from the list for others to vote on")
+@bot.slash_command(
+    name="pick",
+    description="Randomly pick one movie from the current request pool and reset it"
+)
+async def pick_cmd(ctx: "discord.ApplicationContext"):
+    if not ctx.guild:
+        return await ctx.respond("This command can only be used in a server.", ephemeral=True)
+
+    guild_id = ctx.guild.id
+    pool = request_pool.get(guild_id, [])
+
+    if not pool:
+        return await ctx.respond(
+            "There are no requests in the pool yet.\n"
+            "Ask everyone to use `/request` first.",
+            ephemeral=True,
+        )
+
+    user_id, title = pyrandom.choice(pool)
+
+    # Reset the pool for this guild
+    request_pool[guild_id] = []
+
+    member = ctx.guild.get_member(user_id)
+    requester_display = member.mention if member else f"<@{user_id}>"
+
+    # Make the result public so everyone sees what was chosen
+    await ctx.respond(
+        f"🎲 Picked: **{title}**\n"
+        f"Requested by {requester_display}\n"
+        f"The pool has been cleared. Start a new round with `/request`."
+    )
+
+@bot.slash_command(
+    name="request",
+    description="Add a movie to the current random pick pool"
+)
 async def request_cmd(
     ctx: "discord.ApplicationContext",
     title: discord.Option(
@@ -342,12 +381,8 @@ async def request_cmd(
         autocomplete=request_title_autocomplete,
     ),
 ):
-    if MOVIE_REQUESTS_CHANNEL_ID == 0:
-        return await ctx.respond("Movie requests channel is not configured.", ephemeral=True)
-
-    channel = bot.get_channel(MOVIE_REQUESTS_CHANNEL_ID)
-    if not channel:
-        return await ctx.respond("Configured movie requests channel not found.", ephemeral=True)
+    if not ctx.guild:
+        return await ctx.respond("This command can only be used in a server.", ephemeral=True)
 
     if not movie_titles:
         return await ctx.respond(
@@ -355,6 +390,7 @@ async def request_cmd(
             ephemeral=True,
         )
 
+    # Validate against the canonical movie list
     canon_map = {t.lower(): t for t in movie_titles}
     key = title.strip().lower()
 
@@ -367,24 +403,16 @@ async def request_cmd(
 
     canon_title = canon_map[key]
 
-    embed = discord.Embed(
-        title=canon_title,
-        description=(
-            f"Requested by {ctx.author.mention}\n\n"
-            "**[REQUEST A TITLE](https://discord.com/channels/1205041211610501120/1440989357535395911/1440992347709243402)**"
-        ),
-        color=0x2e2f33,
+    # Per-guild pool entry
+    guild_id = ctx.guild.id
+    pool = request_pool.setdefault(guild_id, [])
+    pool.append((ctx.author.id, canon_title))
+
+    await ctx.respond(
+        f"Added **{canon_title}** to this round’s pool.\n"
+        f"Current pool size: `{len(pool)}`.",
+        ephemeral=True,
     )
-
-    msg = await channel.send(embed=embed)
-
-    try:
-        await msg.add_reaction("✅")
-        await msg.add_reaction("🚫")
-    except:
-        pass
-
-    await ctx.respond("Your request has been posted for voting.", ephemeral=True)
 
 # ────────────────────── MEDIA COMMANDS ──────────────────────
 
