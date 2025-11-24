@@ -157,7 +157,6 @@ async def build_birthday_embed(guild: discord.Guild) -> discord.Embed:
     if not birthdays:
         embed.description = (
             "No birthdays have been set yet.\n\n"
-            "Use </set:1440919374310408234> to share your birthday"
         )
         return embed
     sorted_items = sorted(birthdays.items(), key=lambda x: x[1])
@@ -167,7 +166,6 @@ async def build_birthday_embed(guild: discord.Guild) -> discord.Embed:
         name = member.display_name if member else f"User {user_id}"
         lines.append(f"`{mm_dd}` — **{name}**")
     lines.append("")
-    lines.append("Use </set:1440919374310408234> to share your birthday")
     embed.description = "\n".join(lines)
     return embed
 
