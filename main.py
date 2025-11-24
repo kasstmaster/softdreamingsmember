@@ -865,9 +865,9 @@ import requests
 from discord.ext import tasks, commands
 from datetime import time
 
-# CHANGE THESE:
-QOTD_CHANNEL_ID = 1207917070684004452   # Replace with your desired channel (e.g. general, qotd, etc.)
-QOTD_TIME = time(9, 0)                   # 9:00 AM server time (24h format). Change freely!
+# ←←← CHANGE THESE TWO LINES ONLY ←←←
+QOTD_CHANNEL_ID = 1207917070684004452   # Your QOTD channel
+QOTD_TIME = time(9, 0)                  # 9:00 AM server time (change whenever)
 
 class QOTDCog(commands.Cog):
     def __init__(self, bot):
@@ -885,34 +885,24 @@ class QOTDCog(commands.Cog):
             return
 
         try:
-            # Fetch from The Story Shack
             headers = {'User-Agent': 'Mozilla/5.0'}
-            response = requests.get(
+            resp = requests.get(
                 "https://thestoryshack.com/tools/random-question-generator/",
-                headers=headers,
-                timeout=10
+                headers=headers, timeout=10
             )
-            if response.status_code != 200:
-                print(f"[QOTD] Failed to fetch (status {response.status_code})")
-                return
+            resp.raise_for_status()
 
-            # Extract the question from the <h2> tag inside the result div
-            text = response.text
+            text = resp.text
             start = text.find('<h2>') + 4
             end = text.find('</h2>', start)
-            if start == 3 or end == -1:
-                print("[QOTD] Could not parse question")
-                return
-
             question = text[start:end].strip()
             if not question.endswith("?"):
                 question += "?"
 
-            # Pretty embed
             embed = discord.Embed(
                 title="Question of the Day",
                 description=f"**{question}**",
-                color=0x9b59b6  # Purple vibe to match creative questions
+                color=0x9b59b6
             )
             embed.set_footer(text=f"{datetime.now().strftime('%B %d, %Y')} • Reply below!")
             embed.set_thumbnail(url="https://thestoryshack.com/wp-content/uploads/2023/06/storyshack-favicon-150x150.png")
@@ -927,11 +917,25 @@ class QOTDCog(commands.Cog):
     async def before_qotd(self):
         await self.bot.wait_until_ready()
 
-    @commands.slash_command(name="test_qotd", description="Manually trigger today's QOTD (admin only)")
+    @commands.slash_command(name="test_qotd", description="Manually post today's QOTD (admin only)")
     @commands.has_permissions(administrator=True)
     async def test_qotd(self, ctx):
-        await ctx.respond("Fetching a fresh question...", ephemeral=True)
+        await ctx.respond("Fetching a fresh question…", ephemeral=True)
         await self.daily_qotd()
+
+# ←←← KEEP ONLY ONE on_ready (this is the only one in the file now) ←←←
+@bot.event
+async def on_ready():
+    print(f"{bot.user} is online (birthday bot).")
+    await initialize_storage_message()
+    await initialize_media_lists()
+    bot.loop.create_task(birthday_checker())
+
+    # Load QOTD cog → this registers /test_qotd instantly
+    if "QOTDCog" not in bot.cogs:
+        await bot.add_cog(QOTDCog(bot))
+
+    print("[QOTD] Question of the Day system loaded + /test_qotd ready!")
     
 
 bot.run(os.getenv("TOKEN"))
