@@ -33,9 +33,6 @@ MOVIE_REQUESTS_CHANNEL_ID = int(os.getenv("MOVIE_REQUESTS_CHANNEL_ID", "0"))
 MOVIE_STORAGE_CHANNEL_ID = int(os.getenv("MOVIE_STORAGE_CHANNEL_ID", "0"))
 TV_STORAGE_CHANNEL_ID = int(os.getenv("TV_STORAGE_CHANNEL_ID", "0"))
 
-# Holiday & Member Role IDs
-DEAD_CHAT_ROLE_ID = 0  # Set if you use /color command
-
 # Storage
 storage_message_id: int | None = None
 movie_titles: list[str] = []
