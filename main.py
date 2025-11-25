@@ -236,7 +236,7 @@ async def info(ctx: discord.ApplicationContext):
             "• </list:1442017846589653014> – Browse movies or shows (paged list)\n"
             "• </pick:1442305353030176800> – Add your movie pick to the pool\n"
             "• </pool:1442311836497350656> – See the current request pool\n"
-            "• </random:1442017303230156963> – Randomly pick a title from the pool and clear it\n"
+            "• </random:1442017303230156963> – Randomly pick a movie from the pool and clear it\n"
             "• </media_add:1441698665981939825> – Admins can add new movies/shows to the library"
         ),
         inline=False,
@@ -400,7 +400,9 @@ async def pick(ctx, title: discord.Option(str, autocomplete=movie_autocomplete))
     pool.append((ctx.author.id, canon))
     await ctx.respond(f"Added **{canon}** • Pool size: `{len(pool)}`", ephemeral=True)
 
-@bot.slash_command(name="pool")
+@bot.slash_command(name="pool",
+    description="See what movies have been added to todays pool"
+)
 async def pool(ctx):
     pool = request_pool.get(ctx.guild.id, [])
     if not pool:
