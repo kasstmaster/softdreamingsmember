@@ -245,10 +245,10 @@ async def info(ctx: discord.ApplicationContext):
     embed.add_field(
         name="Holiday Themes",
         value=(
-            "• </holiday_add:1442616885802832115> – Apply Christmas or Halloween color roles\n"
+            "• </holiday_add:1442616885802832115> – Apply a holiday server theme\n"
             "  ┣ Matches special roles (Owner / Original Member / Member)\n"
             "  ┗ Gives themed roles like **Grinch**, **Cranberry**, **Tinsel**, **Cauldron**, **Candy**, **Witchy**\n"
-            "• </holiday_remove:1442616885802832116> – Remove all holiday color roles from everyone"
+            "• </holiday_remove:1442616885802832116> – Remove the holiday server theme"
         ),
         inline=False,
     )
@@ -487,7 +487,10 @@ async def set_bot_avatar_from_url(url: str):
         pass
 
 
-@bot.slash_command(name="holiday_add")
+@bot.slash_command(
+    name="holiday_add",
+    description="Add a holiday theme (Christmas or Halloween) to all matching members."
+)
 async def holiday_add(ctx, holiday: discord.Option(str, choices=["christmas", "halloween"])):
     if not (ctx.author.guild_permissions.administrator or ctx.guild.owner_id == ctx.author.id):
         return await ctx.respond("Admin only.", ephemeral=True)
@@ -515,11 +518,14 @@ async def holiday_add(ctx, holiday: discord.Option(str, choices=["christmas", "h
         ephemeral=True,
     )
 
-    # ---- NEW ICON CHANGE ----
     icon_url = CHRISTMAS_ICON_URL if holiday == "christmas" else HALLOWEEN_ICON_URL
     await apply_icon_to_bot_and_server(ctx.guild, icon_url)
 
-@bot.slash_command(name="holiday_remove")
+
+@bot.slash_command(
+    name="holiday_remove",
+    description="Remove all holiday theme roles from everyone."
+)
 async def holiday_remove(ctx):
     if not (ctx.author.guild_permissions.administrator or ctx.guild.owner_id == ctx.author.id):
         return await ctx.respond("Admin only.", ephemeral=True)
@@ -537,10 +543,13 @@ async def holiday_remove(ctx):
                     except:
                         pass
 
-    await ctx.followup.send(f"Removed all holiday roles from **{removed}** members.", ephemeral=True)
+    await ctx.followup.send(
+        f"Removed all holiday roles from **{removed}** members.",
+        ephemeral=True,
+    )
 
-    # ---- NEW ICON RESET ----
     await apply_icon_to_bot_and_server(ctx.guild, DEFAULT_ICON_URL)
+
 
 # ────────────────────── DEAD CHAT ROLE – CHANGE ROLE COLOR ONLY ──────────────────────
 @bot.slash_command(name="color", description="Change the server-wide color of the Dead Chat role")
