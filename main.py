@@ -263,8 +263,8 @@ async def info(ctx: discord.ApplicationContext):
         name="Member & Admin Utilities",
         value=(
             "• </say:1440927430209703986> – Admins can make the bot say a message in any channel\n"
-            "• </commands:1442748488480364594> – Quick reference for admin-only commands\n"
-            "• </membercommands:1442748488480364595> – Shows everything regular members can use"
+            "• </commands:1442619988635549801> – Quick reference for admin-only commands\n"
+            "• </membercommands:1442622321243459598> – Shows everything regular members can use"
         ),
         inline=False,
     )
