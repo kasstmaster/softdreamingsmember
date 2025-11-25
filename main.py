@@ -218,10 +218,10 @@ async def info(ctx: discord.ApplicationContext):
     embed.add_field(
         name="Birthday System",
         value=(
-            "• Members can set their birthday with </set:1440919374310408234>\n"
-            "• Admins can set birthdays for others with </set_for:1440919374310408235>\n"
-            "• Admins can remove birthdays with </remove_for:1440954448468774922>\n"
-            "• </birthdays:1440919374310408236> shows the full birthday list\n"
+            "• </set:1440919374310408234> - Members can set their birthday\n"
+            "• </set_for:1440919374310408235> - Admins can set birthdays for others\n"
+            "• </remove_for:1440954448468774922> - Admins can remove birthdays\n"
+            "• </birthdays:1440919374310408236> - Shows the full birthday list\n"
             "• Auto-updated public birthday list message\n"
             "• Birthday role is given on your day and removed afterward\n"
             "• New members get a welcome DM with a link to add their birthday"
