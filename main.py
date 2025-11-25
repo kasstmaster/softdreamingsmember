@@ -434,8 +434,8 @@ async def media_add(ctx, category: discord.Option(str, choices=["movies", "shows
     await ctx.respond(f"Added **{title}** to {category}.", ephemeral=True)
 
 # ────────────────────── HOLIDAY COLOR ROLES (FINAL CORRECTED PAIRINGS) ──────────────────────
-CHRISTMAS_ROLES = {"Grinch": "Owner", "Cranberry": "Original Member", "Tinsel": "Member"}
-HALLOWEEN_ROLES = {"Cauldron": "Owner", "Candy": "Original Member", "Witchy": "Member"}
+CHRISTMAS_ROLES = {"Grinch": "Owner", "Cranberry": "Original Member", "Tinsel": "Member", "Christmas": "Bots"}
+HALLOWEEN_ROLES = {"Cauldron": "Owner", "Candy": "Original Member", "Witchy": "Member", "Halloween": "Bots"}
 
 def find_role_by_name(guild: discord.Guild, name: str) -> discord.Role | None:
     name_lower = name.lower()
