@@ -3,6 +3,9 @@ import json
 import asyncio
 from datetime import datetime
 
+import discord
+import random as pyrandom
+
 # ───────────────────────── MONTH / DAY DROPDOWNS ─────────────────────────
 MONTH_CHOICES = [
     "January", "February", "March", "April", "May", "June",
@@ -15,9 +18,6 @@ def build_mm_dd(month_name: str, day: int) -> str | None:
     if not month_num or not (1 <= day <= 31):
         return None
     return f"{month_num}-{day:02d}"
-
-import discord
-import random as pyrandom
 
 intents = discord.Intents.default()
 intents.members = True
@@ -33,9 +33,21 @@ MOVIE_REQUESTS_CHANNEL_ID = int(os.getenv("MOVIE_REQUESTS_CHANNEL_ID", "0"))
 MOVIE_STORAGE_CHANNEL_ID = int(os.getenv("MOVIE_STORAGE_CHANNEL_ID", "0"))
 TV_STORAGE_CHANNEL_ID = int(os.getenv("TV_STORAGE_CHANNEL_ID", "0"))
 
-# Dead Chat role (for /color)
+# Dead Chat role (for /color). Both are defined in Railway.
 DEAD_CHAT_ROLE_ID = int(os.getenv("DEAD_CHAT_ROLE_ID", "0"))
 DEAD_CHAT_ROLE_NAME = os.getenv("DEAD_CHAT_ROLE_NAME", "Dead Chat")
+
+# Colors the Dead Chat role will cycle through
+DEAD_CHAT_COLORS = [
+    discord.Color.red(),
+    discord.Color.orange(),
+    discord.Color.gold(),
+    discord.Color.green(),
+    discord.Color.blue(),
+    discord.Color.purple(),
+    discord.Color.magenta(),
+    discord.Color.teal(),
+]
 
 # Storage
 storage_message_id: int | None = None
@@ -188,42 +200,90 @@ async def movie_autocomplete(ctx: discord.AutocompleteContext):
 
 # ────────────────────── COMMANDS ──────────────────────
 @bot.slash_command(name="info", description="Show all bot features")
-async def info(ctx):
-    embed = discord.Embed(title="Members - Bot Features", color=0x00e1ff)
+async def info(ctx: discord.ApplicationContext):
+    # Same icon/logo as the other bot
+    MEMBERS_ICON = "https://images-ext-1.discordapp.net/external/2i-PtcLgl_msR0VTT2mGn_5dtQiC9DK56PxR4uJfCLI/%3Fsize%3D1024/https/cdn.discordapp.com/avatars/1440914703894188122/ff746b98459152a0ba7c4eff5530cd9d.png?format=webp&quality=lossless&width=534&height=534"
+
+    embed = discord.Embed(
+        title="Members - Bot Features",
+        description="Here's everything I can do in this server!",
+        color=0x00e1ff,  # keep this bot's cyan color
+    )
+
     embed.add_field(
-        name="Birthday Features",
+        name="Birthday System",
         value=(
-            "• </set:1440919374310408234> – Set your birthday\n"
-            "• </set_for:1440919374310408235> – Admin set\n"
-            "• </remove_for:1440954448468774922> – Admin remove\n"
-            "• </birthdays:1440919374310408236> – View list\n"
-            "• Auto role + public list + welcome DM"
+            "• Members can set their birthday with </set:1440919374310408234>\n"
+            "• Admins can set birthdays for others with </set_for:1440919374310408235>\n"
+            "• Admins can remove birthdays with </remove_for:1440954448468774922>\n"
+            "• </birthdays:1440919374310408236> shows the full birthday list\n"
+            "• Auto-updated public birthday list message\n"
+            "• Birthday role is given on your day and removed afterward\n"
+            "• New members get a welcome DM with a link to add their birthday"
         ),
         inline=False,
     )
+
     embed.add_field(
-        name="Movie/TV Night",
+        name="Movie & TV Night",
         value=(
-            "• </list:1442017846589653014> movies/shows\n"
-            "• </pick:1442305353030176800>\n"
-            "• </pool:1442311836497350656>\n"
-            "• </random:1442017303230156963>\n"
-            "• </media_add:1441698665981939825> (admin)"
+            "• Maintains a server-wide library of movies and TV shows\n"
+            "• </list:1442017846589653014> – Browse movies or shows (paged list)\n"
+            "• </pick:1442305353030176800> – Add your movie pick to the pool\n"
+            "• </pool:1442311836497350656> – See the current request pool\n"
+            "• </random:1442017303230156963> – Randomly pick a title from the pool and clear it\n"
+            "• </media_add:1441698665981939825> – Admins can add new movies/shows to the library"
         ),
         inline=False,
     )
-    embed.add_field(
-        name="Utility / Admin",
-        value="• </say:1440927430209703986> (admin)\n• </color:1442416784635334668> (Dead Chat role)",
-        inline=False,
-    )
+
     embed.add_field(
         name="Holiday Themes",
-        value="• </holiday_add:1442616885802832115> – Apply Christmas/Halloween colors\n• </holiday_remove:NEW> – Remove all holiday roles",
+        value=(
+            "• </holiday_add:1442616885802832115> – Apply Christmas or Halloween color roles\n"
+            "  ┣ Matches special roles (Owner / Original Member / Member)\n"
+            "  ┗ Gives themed roles like **Grinch**, **Cranberry**, **Tinsel**, **Cauldron**, **Candy**, **Witchy**\n"
+            "• </holiday_remove:1442616885802832116> – Remove all holiday color roles from everyone"
+        ),
         inline=False,
     )
-    embed.set_footer(text="Bot by Soft Dreamings")
+
+    embed.add_field(
+        name="Dead Chat Role Color Cycle",
+        value=(
+            "• </color:1442666939842433125> – Changes the color of the **Dead Chat** role\n"
+            "• Only people who already have the Dead Chat role can use it\n"
+            "• Cycles through a set of bright colors for everyone with that role\n"
+            "• Uses either the configured role ID or fallback name to find the role"
+        ),
+        inline=False,
+    )
+
+    embed.add_field(
+        name="Member & Admin Utilities",
+        value=(
+            "• </say:1440927430209703986> – Admins can make the bot say a message in any channel\n"
+            "• </commands:1442619988635549801> – Quick reference for admin-only commands\n"
+            "• </membercommands:1442622321243459598> – Shows everything regular members can use"
+        ),
+        inline=False,
+    )
+
+    embed.add_field(
+        name="Automatic Tasks",
+        value=(
+            "• Loads birthday data and media lists when the bot comes online\n"
+            "• Checks birthdays every hour and updates the Birthday role automatically\n"
+            "• Sends a birthday-list link DM to new members when they join"
+        ),
+        inline=False,
+    )
+
+    embed.set_thumbnail(url=MEMBERS_ICON)
+    embed.set_footer(text="• Bot by Soft Dreamings", icon_url=MEMBERS_ICON)
+
     await ctx.respond(embed=embed)
+    
 
 @bot.slash_command(name="commands", description="Admin-only command reference")
 async def commands(ctx):
@@ -258,12 +318,14 @@ async def membercommands(ctx):
     )
     embed.add_field(
         name="Movie Night",
-        value="• </list:1442017846589653014> movies/shows\n• </pick:1442305353030176800>\n• </pool:1442311836497350656>",
+        value="• </list:1442017846589653014> movies/shows\n"
+              "• </pick:1442305353030176800>\n"
+              "• </pool:1442311836497350656>",
         inline=False,
     )
     embed.add_field(
         name="Fun",
-        value="• </color:1442416784635334668> (if you have Dead Chat)",
+        value="• </color:1442666939842433125> (if you have Dead Chat)",
         inline=False,
     )
     embed.add_field(name="Full list?", value="Use **/info**!", inline=False)
@@ -398,7 +460,8 @@ async def holiday_add(ctx, holiday: discord.Option(str, choices=["christmas", "h
                     except:
                         pass
     await ctx.followup.send(
-        f"Applied **{holiday.capitalize()}** theme to **{added}** members! {'🎄' if holiday=='christmas' else '🎃'}",
+        f"Applied **{holiday.capitalize()}** theme to **{added}** members! "
+        f"{'🎄' if holiday == 'christmas' else '🎃'}",
         ephemeral=True,
     )
 
@@ -420,24 +483,10 @@ async def holiday_remove(ctx):
                         pass
     await ctx.followup.send(f"Removed all holiday roles from **{removed}** members.", ephemeral=True)
 
-
 # ────────────────────── DEAD CHAT ROLE – CHANGE ROLE COLOR ONLY ──────────────────────
-
-# Colors the Dead Chat role will cycle through (change or reorder however you like)
-DEAD_CHAT_COLORS = [
-    discord.Color.red(),
-    discord.Color.orange(),
-    discord.Color.gold(),
-    discord.Color.green(),
-    discord.Color.blue(),
-    discord.Color.purple(),
-    discord.Color.magenta(),
-    discord.Color.teal(),
-]
-
 @bot.slash_command(name="color", description="Change the server-wide color of the Dead Chat role")
 async def color_cycle(ctx):
-    # 1) Resolve the Dead Chat role
+    # Resolve the Dead Chat role: ID first, then name as fallback
     dead_chat_role = ctx.guild.get_role(DEAD_CHAT_ROLE_ID) if DEAD_CHAT_ROLE_ID != 0 else None
     if dead_chat_role is None and DEAD_CHAT_ROLE_NAME:
         dead_chat_role = discord.utils.get(ctx.guild.roles, name=DEAD_CHAT_ROLE_NAME)
@@ -448,11 +497,11 @@ async def color_cycle(ctx):
             ephemeral=True,
         )
 
-    # 2) Only allow people who HAVE Dead Chat to use this
+    # Only members who HAVE Dead Chat can use this
     if dead_chat_role not in ctx.author.roles:
         return await ctx.respond("You need the Dead Chat role to use this command!", ephemeral=True)
 
-    # 3) Find current color index
+    # Find current color index in the cycle
     colors = DEAD_CHAT_COLORS
     current_index = None
     for i, c in enumerate(colors):
@@ -460,7 +509,7 @@ async def color_cycle(ctx):
             current_index = i
             break
 
-    # If current color not in our list, start at the first color
+    # If current color not in the list, start at first
     if current_index is None:
         next_index = 0
     else:
@@ -468,7 +517,7 @@ async def color_cycle(ctx):
 
     next_color = colors[next_index]
 
-    # 4) Edit the role color (affects everyone with Dead Chat)
+    # Edit the role color (affects everyone with Dead Chat)
     try:
         await dead_chat_role.edit(color=next_color, reason="Dead Chat color cycle")
     except discord.Forbidden:
@@ -482,7 +531,6 @@ async def color_cycle(ctx):
         f"Changed **Dead Chat** role color (step {next_index + 1}/{len(colors)} in the cycle).",
         ephemeral=True,
     )
-
 
 # Admin say
 @bot.slash_command(name="say")
