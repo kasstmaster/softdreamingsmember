@@ -379,7 +379,9 @@ async def remove_for(ctx, member: discord.Member):
     else:
         await ctx.respond("No birthday found.", ephemeral=True)
 
-@bot.slash_command(name="birthdays")
+@bot.slash_command(name="birthdays",
+    description="View everyones birthdays"
+)
 async def birthdays_cmd(ctx):
     await ctx.respond(embed=await build_birthday_embed(ctx.guild), ephemeral=True)
 
