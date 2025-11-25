@@ -1,6 +1,7 @@
 import os
 import json
 import asyncio
+import aiohttp
 from datetime import datetime
 
 import discord
@@ -48,6 +49,10 @@ DEAD_CHAT_COLORS = [
     discord.Color.magenta(),
     discord.Color.teal(),
 ]
+
+CHRISTMAS_ICON_URL = os.getenv("CHRISTMAS_ICON_URL", "")
+HALLOWEEN_ICON_URL = os.getenv("HALLOWEEN_ICON_URL", "")
+DEFAULT_ICON_URL   = os.getenv("DEFAULT_ICON_URL", "")
 
 # Storage
 storage_message_id: int | None = None
@@ -231,7 +236,7 @@ async def info(ctx: discord.ApplicationContext):
             "• </list:1442017846589653014> – Browse movies or shows (paged list)\n"
             "• </pick:1442305353030176800> – Add your movie pick to the pool\n"
             "• </pool:1442311836497350656> – See the current request pool\n"
-            "• </random:1442017303230156963> – Randomly pick a title from the pool and clear it\n"
+            "• </random:1442017303230156963> – Randomly pick a movie from the pool and clear it\n"
             "• </media_add:1441698665981939825> – Admins can add new movies/shows to the library"
         ),
         inline=False,
@@ -240,10 +245,10 @@ async def info(ctx: discord.ApplicationContext):
     embed.add_field(
         name="Holiday Themes",
         value=(
-            "• </holiday_add:1442616885802832115> – Apply Christmas or Halloween color roles\n"
+            "• </holiday_add:1442616885802832115> – Apply a holiday server theme\n"
             "  ┣ Matches special roles (Owner / Original Member / Member)\n"
             "  ┗ Gives themed roles like **Grinch**, **Cranberry**, **Tinsel**, **Cauldron**, **Candy**, **Witchy**\n"
-            "• </holiday_remove:1442616885802832116> – Remove all holiday color roles from everyone"
+            "• </holiday_remove:1442616885802832116> – Remove the holiday server theme"
         ),
         inline=False,
     )
@@ -285,7 +290,7 @@ async def info(ctx: discord.ApplicationContext):
     await ctx.respond(embed=embed)
     
 
-@bot.slash_command(name="commands", description="Admin-only command reference")
+@bot.slash_command(name="commands", description="Admin / Announcer commands")
 async def commands(ctx):
     if not (ctx.author.guild_permissions.administrator or ctx.guild.owner_id == ctx.author.id):
         return await ctx.respond("Admin only.", ephemeral=True)
@@ -332,7 +337,10 @@ async def membercommands(ctx):
     await ctx.respond(embed=embed, ephemeral=True)
 
 # Birthday commands
-@bot.slash_command(name="set")
+@bot.slash_command(
+    name="set",
+    description="Share your birthday with the server"
+)
 async def set_birthday_self(ctx, month: discord.Option(str, choices=MONTH_CHOICES), day: int):
     mm_dd = build_mm_dd(month, day)
     if not mm_dd:
@@ -341,7 +349,10 @@ async def set_birthday_self(ctx, month: discord.Option(str, choices=MONTH_CHOICE
     await update_birthday_list_message(ctx.guild)
     await ctx.respond(f"Birthday set to `{mm_dd}`!", ephemeral=True)
 
-@bot.slash_command(name="set_for")
+@bot.slash_command(
+    name="set_for",
+    description="Add a birthday for a member"
+)
 async def set_for(ctx, member: discord.Member, month: discord.Option(str, choices=MONTH_CHOICES), day: int):
     if not (ctx.author.guild_permissions.administrator or ctx.guild.owner_id == ctx.author.id):
         return await ctx.respond("Admin only.", ephemeral=True)
@@ -352,7 +363,10 @@ async def set_for(ctx, member: discord.Member, month: discord.Option(str, choice
     await update_birthday_list_message(ctx.guild)
     await ctx.respond(f"Set {member.mention}'s birthday to `{mm_dd}`", ephemeral=True)
 
-@bot.slash_command(name="remove_for")
+@bot.slash_command(
+    name="remove_for",
+    description="Remove a members birthday"
+)
 async def remove_for(ctx, member: discord.Member):
     if not (ctx.author.guild_permissions.administrator or ctx.guild.owner_id == ctx.author.id):
         return await ctx.respond("Admin only.", ephemeral=True)
@@ -365,12 +379,17 @@ async def remove_for(ctx, member: discord.Member):
     else:
         await ctx.respond("No birthday found.", ephemeral=True)
 
-@bot.slash_command(name="birthdays")
+@bot.slash_command(name="birthdays",
+    description="View everyones birthdays"
+)
 async def birthdays_cmd(ctx):
     await ctx.respond(embed=await build_birthday_embed(ctx.guild), ephemeral=True)
 
 # Movie commands
-@bot.slash_command(name="pick")
+@bot.slash_command(
+    name="pick",
+    description="Pick a movie to add to the pool"
+)
 async def pick(ctx, title: discord.Option(str, autocomplete=movie_autocomplete)):
     if not movie_titles:
         return await ctx.respond("Movie list not loaded.", ephemeral=True)
@@ -381,7 +400,9 @@ async def pick(ctx, title: discord.Option(str, autocomplete=movie_autocomplete))
     pool.append((ctx.author.id, canon))
     await ctx.respond(f"Added **{canon}** • Pool size: `{len(pool)}`", ephemeral=True)
 
-@bot.slash_command(name="pool")
+@bot.slash_command(name="pool",
+    description="See what movies have been added to todays pool"
+)
 async def pool(ctx):
     pool = request_pool.get(ctx.guild.id, [])
     if not pool:
@@ -395,7 +416,10 @@ async def pool(ctx):
         ephemeral=True,
     )
 
-@bot.slash_command(name="random")
+@bot.slash_command(
+    name="random",
+    description="The bot will choose a random movie from the pool"
+)
 async def random_pick(ctx):
     pool = request_pool.get(ctx.guild.id, [])
     if not pool:
@@ -403,9 +427,14 @@ async def random_pick(ctx):
     user_id, title = pyrandom.choice(pool)
     request_pool[ctx.guild.id] = []
     member = ctx.guild.get_member(user_id)
-    await ctx.respond(f"Random Pick: **{title}**\nRequested by {member.mention if member else '<@'+str(user_id)+'>'}")
+    await ctx.respond(
+        f"Random Pick: **{title}**\nRequested by {member.mention if member else '<@'+str(user_id)+'>'}"
+    )
 
-@bot.slash_command(name="list")
+@bot.slash_command(
+    name="list",
+    description="View the list of movies & shows"
+)
 async def list_media(ctx, category: discord.Option(str, choices=["movies", "shows"])):
     items = movie_titles if category == "movies" else tv_titles
     if not items:
@@ -429,8 +458,8 @@ async def media_add(ctx, category: discord.Option(str, choices=["movies", "shows
     await ctx.respond(f"Added **{title}** to {category}.", ephemeral=True)
 
 # ────────────────────── HOLIDAY COLOR ROLES (FINAL CORRECTED PAIRINGS) ──────────────────────
-CHRISTMAS_ROLES = {"Grinch": "Owner", "Cranberry": "Original Member", "Tinsel": "Member"}
-HALLOWEEN_ROLES = {"Cauldron": "Owner", "Candy": "Original Member", "Witchy": "Member"}
+CHRISTMAS_ROLES = {"Cranberry": "Owner", "Tinsel": "Original Member", "Grinch": "Member", "Christmas": "Bots"}
+HALLOWEEN_ROLES = {"Cauldron": "Owner", "Candy": "Original Member", "Witchy": "Member", "Halloween": "Bots"}
 
 def find_role_by_name(guild: discord.Guild, name: str) -> discord.Role | None:
     name_lower = name.lower()
@@ -440,13 +469,60 @@ def find_role_by_name(guild: discord.Guild, name: str) -> discord.Role | None:
             return role
     return None
 
-@bot.slash_command(name="holiday_add")
+
+async def apply_icon_to_bot_and_server(guild: discord.Guild, url: str):
+    if not url:
+        return
+    try:
+        import aiohttp
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as resp:
+                if resp.status != 200:
+                    return
+                data = await resp.read()
+
+        # Bot icon
+        try:
+            await bot.user.edit(avatar=data)
+        except:
+            pass
+
+        # Server icon
+        try:
+            await guild.edit(icon=data)
+        except:
+            pass
+
+    except:
+        pass
+
+
+async def set_bot_avatar_from_url(url: str):
+    if not url:
+        return
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as resp:
+                if resp.status != 200:
+                    return
+                data = await resp.read()
+        await bot.user.edit(avatar=data)
+    except Exception:
+        pass
+
+
+@bot.slash_command(
+    name="holiday_add",
+    description="Apply a holiday theme to the server"
+)
 async def holiday_add(ctx, holiday: discord.Option(str, choices=["christmas", "halloween"])):
     if not (ctx.author.guild_permissions.administrator or ctx.guild.owner_id == ctx.author.id):
         return await ctx.respond("Admin only.", ephemeral=True)
     await ctx.defer(ephemeral=True)
+
     role_map = CHRISTMAS_ROLES if holiday == "christmas" else HALLOWEEN_ROLES
     added = 0
+
     for color_name, base_keyword in role_map.items():
         color_role = find_role_by_name(ctx.guild, color_name)
         if not color_role:
@@ -459,17 +535,26 @@ async def holiday_add(ctx, holiday: discord.Option(str, choices=["christmas", "h
                         added += 1
                     except:
                         pass
+
     await ctx.followup.send(
         f"Applied **{holiday.capitalize()}** theme to **{added}** members! "
         f"{'🎄' if holiday == 'christmas' else '🎃'}",
         ephemeral=True,
     )
 
-@bot.slash_command(name="holiday_remove")
+    icon_url = CHRISTMAS_ICON_URL if holiday == "christmas" else HALLOWEEN_ICON_URL
+    await apply_icon_to_bot_and_server(ctx.guild, icon_url)
+
+
+@bot.slash_command(
+    name="holiday_remove",
+    description="Remove the holiday theme from the server"
+)
 async def holiday_remove(ctx):
     if not (ctx.author.guild_permissions.administrator or ctx.guild.owner_id == ctx.author.id):
         return await ctx.respond("Admin only.", ephemeral=True)
     await ctx.defer(ephemeral=True)
+
     removed = 0
     for color_name in {**CHRISTMAS_ROLES, **HALLOWEEN_ROLES}:
         role = find_role_by_name(ctx.guild, color_name)
@@ -481,10 +566,17 @@ async def holiday_remove(ctx):
                         removed += 1
                     except:
                         pass
-    await ctx.followup.send(f"Removed all holiday roles from **{removed}** members.", ephemeral=True)
+
+    await ctx.followup.send(
+        f"Removed all holiday roles from **{removed}** members.",
+        ephemeral=True,
+    )
+
+    await apply_icon_to_bot_and_server(ctx.guild, DEFAULT_ICON_URL)
+
 
 # ────────────────────── DEAD CHAT ROLE – CHANGE ROLE COLOR ONLY ──────────────────────
-@bot.slash_command(name="color", description="Change the server-wide color of the Dead Chat role")
+@bot.slash_command(name="color", description="Change the color of the Dead Chat role")
 async def color_cycle(ctx):
     # Resolve the Dead Chat role: ID first, then name as fallback
     dead_chat_role = ctx.guild.get_role(DEAD_CHAT_ROLE_ID) if DEAD_CHAT_ROLE_ID != 0 else None
