@@ -248,16 +248,6 @@ async def get_qotd_sheet_and_tab():
         print(f"Worksheet '{tab}' not found! Falling back to 'Regular'")
         return sh.worksheet("Regular"), "Regular"
 
-async def get_qotd_sheet_and_tab():
-    sh = gc.open_by_key(SHEET_ID)
-    today = datetime.utcnow()
-    if 10 <= today.month <= 11:      # Oct & Nov → Fall Season
-        tab = "Fall Season"
-    elif today.month == 12:          # Dec → Christmas
-        tab = "Christmas"
-    else:
-        tab = "Regular"
-    return sh.worksheet(tab), tab
 
 async def post_daily_qotd():
     if QOTD_CHANNEL_ID == 0:
