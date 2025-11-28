@@ -1,5 +1,11 @@
 [packages]
 py-cord = "==2.4.1"
+aiohttp = "*"
+gspread = "*"
+google-auth = "*"
+google-auth-oauthlib = "*"
+google-auth-httplib2 = "*"
+google-api-python-client = "*"
 
 [requires]
 python_version = "3.11"
