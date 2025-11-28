@@ -25,18 +25,36 @@ intents = discord.Intents.default()
 intents.members = True
 bot = discord.Bot(intents=intents)
 
+# Safe integer environment variable loader
+def _env_int(var_name: str, default: int) -> int:
+    value = os.getenv(var_name)
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        print(f"[WARNING] Invalid value for {var_name}: {value!r} — using default {default}")
+        return default
+
 # ───────────────────────── CONFIG ─────────────────────────
-BIRTHDAY_ROLE_ID = int(os.getenv("BIRTHDAY_ROLE_ID", "1217937235840598026"))
-BIRTHDAY_STORAGE_CHANNEL_ID = int(os.getenv("BIRTHDAY_STORAGE_CHANNEL_ID", "1440912334813134868"))
-BIRTHDAY_LIST_CHANNEL_ID = 1440989357535395911
-BIRTHDAY_LIST_MESSAGE_ID = 1440989655515271248
+BIRTHDAY_ROLE_ID            = _env_int("BIRTHDAY_ROLE_ID", 1217937235840598026)
+BIRTHDAY_STORAGE_CHANNEL_ID = _env_int("BIRTHDAY_STORAGE_CHANNEL_ID", 1440912334813134868)
+BIRTHDAY_LIST_CHANNEL_ID    = 1440989357535395911
+BIRTHDAY_LIST_MESSAGE_ID    = 1440989655515271248
+MOVIE_REQUESTS_CHANNEL_ID   = _env_int("MOVIE_REQUESTS_CHANNEL_ID", 0)
+MOVIE_STORAGE_CHANNEL_ID    = _env_int("MOVIE_STORAGE_CHANNEL_ID", 0)
+TV_STORAGE_CHANNEL_ID       = _env_int("TV_STORAGE_CHANNEL_ID", 0)
+DEAD_CHAT_ROLE_ID           = _env_int("DEAD_CHAT_ROLE_ID", 0)
+DEAD_CHAT_ROLE_NAME         = os.getenv("DEAD_CHAT_ROLE_NAME", "Dead Chat")
 
-MOVIE_REQUESTS_CHANNEL_ID = int(os.getenv("MOVIE_REQUESTS_CHANNEL_ID", "0"))
-MOVIE_STORAGE_CHANNEL_ID = int(os.getenv("MOVIE_STORAGE_CHANNEL_ID", "0"))
-TV_STORAGE_CHANNEL_ID = int(os.getenv("TV_STORAGE_CHANNEL_ID", "0"))
+# Holiday icons (these are just strings, safe as-is)
+CHRISTMAS_ICON_URL          = os.getenv("CHRISTMAS_ICON_URL", "")
+HALLOWEEN_ICON_URL          = os.getenv("HALLOWEEN_ICON_URL", "")
+DEFAULT_ICON_URL            = os.getenv("DEFAULT_ICON_URL", "")
 
-DEAD_CHAT_ROLE_ID = int(os.getenv("DEAD_CHAT_ROLE_ID", "0"))
-DEAD_CHAT_ROLE_NAME = os.getenv("DEAD_CHAT_ROLE_NAME", "Dead Chat")
+# QOTD settings
+QOTD_CHANNEL_ID             = _env_int("QOTD_CHANNEL_ID", 0)
+QOTD_TIME_HOUR              = _env_int("QOTD_TIME_HOUR", 10)
 
 # Colors the Dead Chat role will cycle through
 DEAD_CHAT_COLORS = [
