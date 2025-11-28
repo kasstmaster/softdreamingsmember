@@ -205,15 +205,48 @@ async def movie_autocomplete(ctx: discord.AutocompleteContext):
 
 
 # ────────────────────── QUESTION OF THE DAY (Google Sheets) ──────────────────────
-creds_dict = json.loads(os.getenv("GOOGLE_CREDENTIALS"))
-creds = Credentials.from_service_account_info(
-    creds_dict,
-    scopes=["https://www.googleapis.com/auth/spreadsheets"]
-)
-gc = gspread.authorize(creds)
+gc = None
 SHEET_ID = os.getenv("GOOGLE_SHEET_ID")
 QOTD_CHANNEL_ID = int(os.getenv("QOTD_CHANNEL_ID", "0"))
 QOTD_TIME_HOUR = int(os.getenv("QOTD_TIME_HOUR", "10"))  # UTC hour
+
+async def init_gspread():
+    global gc
+    creds_json = os.getenv("GOOGLE_CREDENTIALS")
+    if not creds_json:
+        print("GOOGLE_CREDENTIALS not found in environment!")
+        return False
+    try:
+        creds_dict = json.loads(creds_json)
+        creds = Credentials.from_service_account_info(
+            creds_dict,
+            scopes=["https://www.googleapis.com/auth/spreadsheets"]
+        )
+        gc = gspread.authorize(creds)
+        print("Google Sheets connected successfully!")
+        return True
+    except Exception as e:
+        print(f"Failed to connect to Google Sheets: {e}")
+        return False
+
+async def get_qotd_sheet_and_tab():
+    if gc is None:
+        await init_gspread()
+    if gc is None:
+        return None, None
+    sh = gc.open_by_key(SHEET_ID)
+    today = datetime.utcnow()
+    if 10 <= today.month <= 11:
+        tab = "Fall Season"
+    elif today.month == 12:
+        tab = "Christmas"
+    else:
+        tab = "Regular"
+    try:
+        return sh.worksheet(tab), tab
+    except gspread.exceptions.WorksheetNotFound:
+        print(f"Worksheet '{tab}' not found! Falling back to 'Regular'")
+        return sh.worksheet("Regular"), "Regular"
 
 async def get_qotd_sheet_and_tab():
     sh = gc.open_by_key(SHEET_ID)
@@ -234,9 +267,14 @@ async def post_daily_qotd():
         return
 
     worksheet, season = await get_qotd_sheet_and_tab()
+    if worksheet is None:
+        print("QOTD skipped: Google Sheets not connected or worksheet missing")
+        return
+
     all_vals = worksheet.get_all_values()
     if len(all_vals) < 2:
-        return  # empty sheet
+        print("QOTD skipped: sheet is empty")
+        return
 
     questions = all_vals[1:]  # skip header row
     unused = [row for row in questions if len(row) < 2 or not row[1].strip()]
@@ -721,7 +759,8 @@ async def on_ready():
     await initialize_media_lists()
     bot.loop.create_task(birthday_checker())
     bot.loop.create_task(qotd_scheduler())
-    print("QOTD scheduler started!")
+    await init_gspread()
+    print("QOTD scheduler started + Google Sheets ready!")
 
 @bot.event
 async def on_member_join(member):
