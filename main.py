@@ -495,12 +495,11 @@ async def apply_icon_to_bot_and_server(guild: discord.Guild, url: str):
 from datetime import datetime, time, timezone
 
 def movie_night_time() -> str:
-    """Returns 'MOVIE NIGHTS START AT <t:XXXXX:t>' with correct time (6 PM UTC)"""
     now = datetime.now(timezone.utc)
     tonight = datetime.combine(now.date(), time(18, 0), tzinfo=timezone.utc)
     if now >= tonight:
         tonight = tonight.replace(day=tonight.day + 1)  # tomorrow
-    return f"MOVIE NIGHTS START AT <t:{int(tonight.timestamp())}:t>"
+    return f"MOVIE NIGHTS START AT <t:1764468000:t>"
 
 
 ############### VIEWS / UI COMPONENTS ###############
