@@ -1,27 +1,20 @@
 # ============================================================
-# Grok & ChatGPT — STRUCTURE RULES FOR THIS FILE
+# Grok & ChatGPT RULES FOR THIS FILE (DO NOT VIOLATE)
 #
-# 1. Always organize the code using these exact sections:
+# • Use ONLY these sections, in this exact order:
+#   ############### IMPORTS ###############
+#   ############### CONSTANTS & CONFIG ###############
+#   ############### GLOBAL STATE / STORAGE ###############
+#   ############### HELPER FUNCTIONS ###############
+#   ############### VIEWS / UI COMPONENTS ###############
+#   ############### AUTOCOMPLETE FUNCTIONS ###############
+#   ############### BACKGROUND TASKS & SCHEDULERS ###############
+#   ############### EVENT HANDLERS ###############
+#   ############### COMMAND GROUPS ###############
+#   ############### ON_READY & BOT START ###############
 #
-#    ############### IMPORTS ###############
-#    ############### CONSTANTS & CONFIG ###############
-#    ############### GLOBAL STATE / STORAGE ###############
-#    ############### HELPER FUNCTIONS ###############
-#    ############### VIEWS / UI COMPONENTS ###############
-#    ############### AUTOCOMPLETE FUNCTIONS ###############
-#    ############### BACKGROUND TASKS & SCHEDULERS ###############
-#    ############### EVENT HANDLERS ###############
-#    ############### COMMAND GROUPS ###############
-#    ############### ON_READY & BOT START ###############
-#
-# 2. Do NOT add any extra section headers beyond these.
-#
-# 3. Do NOT add comments or notes inside functions or code blocks.
-#    No explanations, no inline notes, no docstrings unless already present.
-#
-# 4. When modifying or reorganizing this file, follow the structure
-#    strictly and keep all logic exactly where it belongs.
-#
+# • Do NOT add any other sections.
+# • Do NOT add comments, notes, or explanations inside the code.
 # ============================================================
 
 ############### IMPORTS ###############
