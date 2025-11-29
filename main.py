@@ -26,6 +26,21 @@ def _env_int(var_name: str, default: int) -> int:
         print(f"[WARNING] Invalid value for {var_name}: {value!r} — using default {default}")
         return default
 
+GOOGLE_CREDS_RAW = os.getenv("GOOGLE_CREDENTIALS")
+SHEET_ID = os.getenv("GOOGLE_SHEET_ID")
+gc = None
+if GOOGLE_CREDS_RAW and SHEET_ID:
+    try:
+        creds_dict = json.loads(GOOGLE_CREDS_RAW)
+        creds = Credentials.from_service_account_info(creds_dict, scopes=["https://www.googleapis.com/auth/spreadsheets"])
+        gc = gspread.authorize(creds)
+        print("QOTD: Google Sheets client initialized.")
+    except Exception as e:
+        print("QOTD init error:", repr(e))
+        traceback.print_exc()
+else:
+    print("QOTD disabled: missing GOOGLE_CREDENTIALS or GOOGLE_SHEET_ID")
+
 BIRTHDAY_ROLE_ID = _env_int("BIRTHDAY_ROLE_ID", 1217937235840598026)
 BIRTHDAY_STORAGE_CHANNEL_ID = _env_int("BIRTHDAY_STORAGE_CHANNEL_ID", 1440912334813134868)
 BIRTHDAY_LIST_CHANNEL_ID = 1440989357535395911
@@ -35,11 +50,13 @@ TV_STORAGE_CHANNEL_ID = _env_int("TV_STORAGE_CHANNEL_ID", 0)
 DEAD_CHAT_ROLE_ID = _env_int("DEAD_CHAT_ROLE_ID", 0)
 DEAD_CHAT_ROLE_NAME = os.getenv("DEAD_CHAT_ROLE_NAME", "Dead Chat")
 QOTD_CHANNEL_ID = _env_int("QOTD_CHANNEL_ID", 0)
-QOTD_TIME_HOUR = _env_int("QOTD_TIME_HOUR", 10)
 
 CHRISTMAS_ICON_URL = os.getenv("CHRISTMAS_ICON_URL", "")
 HALLOWEEN_ICON_URL = os.getenv("HALLOWEEN_ICON_URL", "")
 DEFAULT_ICON_URL = os.getenv("DEFAULT_ICON_URL", "")
+
+CHRISTMAS_ROLES = {"Cranberry": "Admin", "lights": "Original Member", "Grinch": "Member", "Christmas": "Bots"}
+HALLOWEEN_ROLES = {"Cauldron": "Admin", "Candy": "Original Member", "Witchy": "Member", "Halloween": "Bots"}
 
 DEAD_CHAT_COLORS = [
     discord.Color.red(), discord.Color.orange(), discord.Color.gold(),
@@ -56,7 +73,7 @@ MONTH_TO_NUM = {name: f"{i:02d}" for i, name in enumerate(MONTH_CHOICES, start=1
 PAGE_SIZE = 25
 
 
-############### GLOBAL STORAGE ###############
+############### GLOBAL STATE / STORAGE ###############
 storage_message_id: int | None = None
 movie_titles: list[str] = []
 tv_titles: list[str] = []
@@ -164,69 +181,6 @@ async def update_birthday_list_message(guild: discord.Guild):
     except:
         pass
 
-
-############### MEDIA PAGER VIEW ###############
-class MediaPagerView(discord.ui.View):
-    def __init__(self, category: str, page: int = 0):
-        super().__init__(timeout=120)
-        self.category = category
-        self.page = page
-
-    def _items(self):
-        return movie_titles if self.category == "movies" else tv_titles
-
-    def _max_page(self):
-        return max(0, (len(self._items()) - 1) // PAGE_SIZE)
-
-    def _build_content(self):
-        items = self._items()
-        if not items:
-            return "No items."
-        max_page = self._max_page()
-        self.page = max(0, min(self.page, max_page))
-        start = self.page * PAGE_SIZE
-        slice_items = items[start:start + PAGE_SIZE]
-        lines = [f"{i+1}. {t}" for i, t in enumerate(slice_items, start+1)]
-        header = f"{self.category.capitalize()} • Page {self.page+1}/{max_page+1} ({len(items)} total)"
-        return f"{header}\n```text\n" + "\n".join(lines if lines else ["Empty"]) + "\n```"
-
-    async def send_initial(self, ctx):
-        await ctx.respond(self._build_content(), view=self, ephemeral=True)
-
-    @discord.ui.button(label="Prev", style=discord.ButtonStyle.secondary)
-    async def prev(self, button, interaction):
-        self.page -= 1
-        await interaction.response.edit_message(content=self._build_content(), view=self)
-
-    @discord.ui.button(label="Next", style=discord.ButtonStyle.secondary)
-    async def next(self, button, interaction):
-        self.page += 1
-        await interaction.response.edit_message(content=self._build_content(), view=self)
-
-
-############### AUTOCOMPLETE ###############
-async def movie_autocomplete(ctx: discord.AutocompleteContext):
-    query = (ctx.value or "").lower()
-    matches = [m for m in movie_titles if query in m.lower()]
-    return matches[:25] or movie_titles[:25]
-
-
-############### GOOGLE SHEETS / QOTD SETUP ###############
-GOOGLE_CREDS_RAW = os.getenv("GOOGLE_CREDENTIALS")
-SHEET_ID = os.getenv("GOOGLE_SHEET_ID")
-gc = None
-if GOOGLE_CREDS_RAW and SHEET_ID:
-    try:
-        creds_dict = json.loads(GOOGLE_CREDS_RAW)
-        creds = Credentials.from_service_account_info(creds_dict, scopes=["https://www.googleapis.com/auth/spreadsheets"])
-        gc = gspread.authorize(creds)
-        print("QOTD: Google Sheets client initialized.")
-    except Exception as e:
-        print("QOTD init error:", repr(e))
-        traceback.print_exc()
-else:
-    print("QOTD disabled: missing GOOGLE_CREDENTIALS or GOOGLE_SHEET_ID")
-
 async def get_qotd_sheet_and_tab():
     if gc is None or not SHEET_ID:
         raise RuntimeError("QOTD is not configured.")
@@ -276,70 +230,6 @@ async def post_daily_qotd():
     status_col = "A" if chosen[1].strip() else "B"
     worksheet.update(f"{status_col}{row_idx}", [[f"Used {datetime.utcnow().strftime('%Y-%m-%d')}"]])
     print(f"QOTD: Posted question from row {row_idx} ({season}).")
-
-
-############### BACKGROUND TASKS ###############
-async def qotd_scheduler():
-    await bot.wait_until_ready()
-    TARGET_HOUR_UTC = 17
-    TARGET_MINUTE = 0
-    while not bot.is_closed():
-        now = datetime.utcnow()
-        if now.hour == TARGET_HOUR_UTC and now.minute == TARGET_MINUTE:
-            try:
-                await post_daily_qotd()
-            except Exception as e:
-                print("QOTD scheduler error:", repr(e))
-                traceback.print_exc()
-            await asyncio.sleep(61)
-        await asyncio.sleep(30)
-
-async def holiday_scheduler():
-    await bot.wait_until_ready()
-    TARGET_HOUR_UTC = 9
-    TARGET_MINUTE = 0
-    while not bot.is_closed():
-        now = datetime.utcnow()
-        if now.hour == TARGET_HOUR_UTC and now.minute == TARGET_MINUTE:
-            today = now.strftime("%m-%d")
-            for guild in bot.guilds:
-                if "10-01" <= today <= "10-31":
-                    await clear_holiday_theme(guild)
-                    await apply_holiday_theme(guild, "halloween")
-                elif "12-01" <= today <= "12-26":
-                    await clear_holiday_theme(guild)
-                    await apply_holiday_theme(guild, "christmas")
-            await asyncio.sleep(61)
-        await asyncio.sleep(30)
-
-async def birthday_checker():
-    await bot.wait_until_ready()
-    TARGET_HOUR_UTC = 15
-    TARGET_MINUTE = 0
-    while not bot.is_closed():
-        now = datetime.utcnow()
-        if now.hour == TARGET_HOUR_UTC and now.minute == TARGET_MINUTE:
-            today = now.strftime("%m-%d")
-            data = await _load_storage_message()
-            for guild in bot.guilds:
-                role = guild.get_role(BIRTHDAY_ROLE_ID)
-                if not role:
-                    continue
-                bdays = data.get(str(guild.id), {})
-                for member in guild.members:
-                    if bdays.get(str(member.id)) == today:
-                        if role not in member.roles:
-                            await member.add_roles(role, reason="Birthday!")
-                    else:
-                        if role in member.roles:
-                            await member.remove_roles(role, reason="Birthday over")
-            await asyncio.sleep(61)
-        await asyncio.sleep(30)
-
-
-############### HOLIDAY THEME FUNCTIONS ###############
-CHRISTMAS_ROLES = {"Cranberry": "Admin", "lights": "Original Member", "Grinch": "Member", "Christmas": "Bots"}
-HALLOWEEN_ROLES = {"Cauldron": "Admin", "Candy": "Original Member", "Witchy": "Member", "Halloween": "Bots"}
 
 def find_role_by_name(guild: discord.Guild, name: str) -> discord.Role | None:
     name_lower = name.lower()
@@ -398,7 +288,131 @@ async def apply_icon_to_bot_and_server(guild: discord.Guild, url: str):
         pass
 
 
-############### COMMANDS ###############
+############### VIEWS / UI COMPONENTS ###############
+class MediaPagerView(discord.ui.View):
+    def __init__(self, category: str, page: int = 0):
+        super().__init__(timeout=120)
+        self.category = category
+        self.page = page
+
+    def _items(self):
+        return movie_titles if self.category == "movies" else tv_titles
+
+    def _max_page(self):
+        return max(0, (len(self._items()) - 1) // PAGE_SIZE)
+
+    def _build_content(self):
+        items = self._items()
+        if not items:
+            return "No items."
+        max_page = self._max_page()
+        self.page = max(0, min(self.page, max_page))
+        start = self.page * PAGE_SIZE
+        slice_items = items[start:start + PAGE_SIZE]
+        lines = [f"{i+1}. {t}" for i, t in enumerate(slice_items, start+1)]
+        header = f"{self.category.capitalize()} • Page {self.page+1}/{max_page+1} ({len(items)} total)"
+        return f"{header}\n```text\n" + "\n".join(lines if lines else ["Empty"]) + "\n```"
+
+    async def send_initial(self, ctx):
+        await ctx.respond(self._build_content(), view=self, ephemeral=True)
+
+    @discord.ui.button(label="Prev", style=discord.ButtonStyle.secondary)
+    async def prev(self, button, interaction):
+        self.page -= 1
+        await interaction.response.edit_message(content=self._build_content(), view=self)
+
+    @discord.ui.button(label="Next", style=discord.ButtonStyle.secondary)
+    async def next(self, button, interaction):
+        self.page += 1
+        await interaction.response.edit_message(content=self._build_content(), view=self)
+
+
+############### AUTOCOMPLETE FUNCTIONS ###############
+async def movie_autocomplete(ctx: discord.AutocompleteContext):
+    query = (ctx.value or "").lower()
+    matches = [m for m in movie_titles if query in m.lower()]
+    return matches[:25] or movie_titles[:25]
+
+
+############### BACKGROUND TASKS & SCHEDULERS ###############
+async def qotd_scheduler():
+    await bot.wait_until_ready()
+    TARGET_HOUR_UTC = 17
+    TARGET_MINUTE = 0
+    while not bot.is_closed():
+        now = datetime.utcnow()
+        if now.hour == TARGET_HOUR_UTC and now.minute == TARGET_MINUTE:
+            try:
+                await post_daily_qotd()
+            except Exception as e:
+                print("QOTD scheduler error:", repr(e))
+                traceback.print_exc()
+            await asyncio.sleep(61)
+        await asyncio.sleep(30)
+
+async def holiday_scheduler():
+    await bot.wait_until_ready()
+    TARGET_HOUR_UTC = 9
+    TARGET_MINUTE = 0
+    while not bot.is_closed():
+        now = datetime.utcnow()
+        if now.hour == TARGET_HOUR_UTC and now.minute == TARGET_MINUTE:
+            today = now.strftime("%m-%d")
+            for guild in bot.guilds:
+                if "10-01" <= today <= "10-31":
+                    await clear_holiday_theme(guild)
+                    await apply_holiday_theme(guild, "halloween")
+                elif "12-01" <= today <= "12-26":
+                    await clear_holiday_theme(guild)
+                    await apply_holiday_theme(guild, "christmas")
+            await asyncio.sleep(61)
+        await asyncio.sleep(30)
+
+async def birthday_checker():
+    await bot.wait_until_ready()
+    TARGET_HOUR_UTC = 15
+    TARGET_MINUTE = 0
+    while not bot.is_closed():
+        now = datetime.utcnow()
+        if now.hour == TARGET_HOUR_UTC and now.minute == TARGET_MINUTE:
+            today = now.strftime("%m-%d")
+            data = await _load_storage_message()
+            for guild in bot.guilds:
+                role = guild.get_role(BIRTHDAY_ROLE_ID)
+                if not role:
+                    continue
+                bdays = data.get(str(guild.id), {})
+                for member in guild.members:
+                    if bdays.get(str(member.id)) == today:
+                        if role not in member.roles:
+                            await member.add_roles(role, reason="Birthday!")
+                    else:
+                        if role in member.roles:
+                            await member.remove_roles(role, reason="Birthday over")
+            await asyncio.sleep(61)
+        await asyncio.sleep(30)
+
+
+############### EVENT HANDLERS ###############
+@bot.event
+async def on_ready():
+    print(f"{bot.user} online!")
+    await initialize_storage_message()
+    await initialize_media_lists()
+    bot.loop.create_task(birthday_checker())
+    bot.loop.create_task(qotd_scheduler())
+    bot.loop.create_task(holiday_scheduler())
+    print("QOTD scheduler started + Google Sheets ready!")
+
+@bot.event
+async def on_member_join(member):
+    try:
+        await member.send("Welcome! Add your birthday here → https://discord.com/channels/1205041211610501120/1440989357535395911/1440989655515271248")
+    except:
+        pass
+
+
+############### COMMAND GROUPS ###############
 @bot.slash_command(name="info", description="Show all bot features")
 async def info(ctx: discord.ApplicationContext):
     MEMBERS_ICON = "https://images-ext-1.discordapp.net/external/2i-PtcLgl_msR0VTT2mGn_5dtQiC9DK56PxR4uJfCLI/%3Fsize%3D1024/https/cdn.discordapp.com/avatars/1440914703894188122/ff746b98459152a0ba7c4eff5530cd9d.png?format=webp&quality=lossless&width=534&height=534"
@@ -570,24 +584,5 @@ async def qotd_now(ctx):
     await ctx.followup.send("QOTD posted!", ephemeral=True)
 
 
-############### EVENTS ###############
-@bot.event
-async def on_ready():
-    print(f"{bot.user} online!")
-    await initialize_storage_message()
-    await initialize_media_lists()
-    bot.loop.create_task(birthday_checker())
-    bot.loop.create_task(qotd_scheduler())
-    bot.loop.create_task(holiday_scheduler())
-    print("QOTD scheduler started + Google Sheets ready!")
-
-@bot.event
-async def on_member_join(member):
-    try:
-        await member.send("Welcome! Add your birthday here → https://discord.com/channels/1205041211610501120/1440989357535395911/1440989655515271248")
-    except:
-        pass
-
-
-############### START BOT ###############
+############### ON_READY & BOT START ###############
 bot.run(os.getenv("TOKEN"))
