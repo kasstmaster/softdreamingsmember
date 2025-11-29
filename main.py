@@ -904,7 +904,7 @@ async def random_pick(ctx):
     await save_request_pool()
     await update_pool_public_message(ctx.guild)
     member = ctx.guild.get_member(user_id)
-    await ctx.respond(f"Random Pick: **{title}**\nRequested by {member.mention if member else '<@'+str(user_id)+'>'}")
+    await ctx.respond(f"🎬 Pool Winner: **{title}**\nPicked by {member.mention if member else '<@'+str(user_id)+'>'}")
 
 if ENABLE_TV_IN_PICK:
     @bot.slash_command(name="pick", description="Browse the movie or TV collection and add picks to today's pool")
