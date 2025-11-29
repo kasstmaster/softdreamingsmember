@@ -298,17 +298,18 @@ async def get_guild_birthdays(guild_id: int):
 
 async def build_birthday_embed(guild: discord.Guild) -> discord.Embed:
     birthdays = await get_guild_birthdays(guild.id)
-    embed = discord.Embed(title="Our Birthdays!", color=0x2e2f33)
-    if not birthdays:
-        embed.description = "No birthdays set yet."
-        return embed
     lines = []
     for user_id, mm_dd in sorted(birthdays.items(), key=lambda x: x[1]):
         member = guild.get_member(int(user_id))
         name = member.display_name if member else "Unknown User"
-        lines.append(f"`{mm_dd}` — **{name}**")
-    embed.description = "\n".join(lines)
-    return embed
+        lines.append(f"{mm_dd} — {name}")
+    description = "\n".join(lines) if lines else "No birthdays yet!"
+    description += "\n\n• </set:1440919374310408234> - Add your birthday to the server’s shared birthday list."
+    return discord.Embed(
+        title="OUR BIRTHDAYS!",
+        description=description,
+        color=0x2e2f33
+    )
 
 async def get_birthday_public_location(guild_id: int):
     data = await _load_storage_message()
