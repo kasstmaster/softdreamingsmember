@@ -1,3 +1,29 @@
+# ============================================================
+# Grok & ChatGPT — STRUCTURE RULES FOR THIS FILE
+#
+# 1. Always organize the code using these exact sections:
+#
+#    ############### IMPORTS ###############
+#    ############### CONSTANTS & CONFIG ###############
+#    ############### GLOBAL STATE / STORAGE ###############
+#    ############### HELPER FUNCTIONS ###############
+#    ############### VIEWS / UI COMPONENTS ###############
+#    ############### AUTOCOMPLETE FUNCTIONS ###############
+#    ############### BACKGROUND TASKS & SCHEDULERS ###############
+#    ############### EVENT HANDLERS ###############
+#    ############### COMMAND GROUPS ###############
+#    ############### ON_READY & BOT START ###############
+#
+# 2. Do NOT add any extra section headers beyond these.
+#
+# 3. Do NOT add comments or notes inside functions or code blocks.
+#    No explanations, no inline notes, no docstrings unless already present.
+#
+# 4. When modifying or reorganizing this file, follow the structure
+#    strictly and keep all logic exactly where it belongs.
+#
+# ============================================================
+
 ############### IMPORTS ###############
 import os
 import json
