@@ -393,6 +393,24 @@ async def qotd_now(ctx):
 
     await ctx.followup.send("QOTD posted!", ephemeral=True)
 
+
+async def holiday_scheduler():
+    await bot.wait_until_ready()
+    while not bot.is_closed():
+        today = datetime.utcnow().strftime("%m-%d")
+
+        for guild in bot.guilds:
+            if "10-01" <= today <= "10-31":
+                await apply_holiday_theme(guild, "halloween")
+            elif "12-01" <= today <= "12-26":
+                await apply_holiday_theme(guild, "christmas")
+            else:
+                await clear_holiday_theme(guild)
+
+        # Run once per day
+        await asyncio.sleep(86400)
+
+
 # ────────────────────── COMMANDS ──────────────────────
 @bot.slash_command(name="info", description="Show all bot features")
 async def info(ctx: discord.ApplicationContext):
@@ -670,6 +688,54 @@ def find_role_by_name(guild: discord.Guild, name: str) -> discord.Role | None:
             return role
     return None
 
+async def apply_holiday_theme(guild: discord.Guild, holiday: str) -> int:
+    """
+    Apply Christmas or Halloween theme to the server.
+
+    Returns number of members that were given a holiday role in this call.
+    """
+    role_map = CHRISTMAS_ROLES if holiday == "christmas" else HALLOWEEN_ROLES
+    added = 0
+
+    for color_name, base_keyword in role_map.items():
+        color_role = find_role_by_name(guild, color_name)
+        if not color_role:
+            continue
+
+        async for member in guild.fetch_members(limit=None):
+            if any(base_keyword.lower() in r.name.lower() for r in member.roles):
+                if color_role not in member.roles:
+                    try:
+                        await member.add_roles(color_role, reason=f"{holiday.capitalize()} theme")
+                        added += 1
+                    except:
+                        pass
+
+    icon_url = CHRISTMAS_ICON_URL if holiday == "christmas" else HALLOWEEN_ICON_URL
+    await apply_icon_to_bot_and_server(guild, icon_url)
+    return added
+
+
+async def clear_holiday_theme(guild: discord.Guild) -> int:
+    """
+    Remove all holiday roles and restore default icon.
+
+    Returns number of members that had any holiday role removed.
+    """
+    removed = 0
+    for color_name in {**CHRISTMAS_ROLES, **HALLOWEEN_ROLES}:
+        role = find_role_by_name(guild, color_name)
+        if role:
+            async for member in guild.fetch_members(limit=None):
+                if role in member.roles:
+                    try:
+                        await member.remove_roles(role, reason="Holiday theme ended")
+                        removed += 1
+                    except:
+                        pass
+
+    await apply_icon_to_bot_and_server(guild, DEFAULT_ICON_URL)
+    return removed
 
 async def apply_icon_to_bot_and_server(guild: discord.Guild, url: str):
     if not url:
@@ -719,32 +785,14 @@ async def set_bot_avatar_from_url(url: str):
 async def holiday_add(ctx, holiday: discord.Option(str, choices=["christmas", "halloween"])):
     if not (ctx.author.guild_permissions.administrator or ctx.guild.owner_id == ctx.author.id):
         return await ctx.respond("Admin only.", ephemeral=True)
+
     await ctx.defer(ephemeral=True)
-
-    role_map = CHRISTMAS_ROLES if holiday == "christmas" else HALLOWEEN_ROLES
-    added = 0
-
-    for color_name, base_keyword in role_map.items():
-        color_role = find_role_by_name(ctx.guild, color_name)
-        if not color_role:
-            continue
-        async for member in ctx.guild.fetch_members(limit=None):
-            if any(base_keyword.lower() in r.name.lower() for r in member.roles):
-                if color_role not in member.roles:
-                    try:
-                        await member.add_roles(color_role, reason=f"{holiday.capitalize()} theme")
-                        added += 1
-                    except:
-                        pass
-
+    added = await apply_holiday_theme(ctx.guild, holiday)
     await ctx.followup.send(
         f"Applied **{holiday.capitalize()}** theme to **{added}** members! "
         f"{'🎄' if holiday == 'christmas' else '🎃'}",
         ephemeral=True,
     )
-
-    icon_url = CHRISTMAS_ICON_URL if holiday == "christmas" else HALLOWEEN_ICON_URL
-    await apply_icon_to_bot_and_server(ctx.guild, icon_url)
 
 
 @bot.slash_command(
@@ -754,26 +802,13 @@ async def holiday_add(ctx, holiday: discord.Option(str, choices=["christmas", "h
 async def holiday_remove(ctx):
     if not (ctx.author.guild_permissions.administrator or ctx.guild.owner_id == ctx.author.id):
         return await ctx.respond("Admin only.", ephemeral=True)
+
     await ctx.defer(ephemeral=True)
-
-    removed = 0
-    for color_name in {**CHRISTMAS_ROLES, **HALLOWEEN_ROLES}:
-        role = find_role_by_name(ctx.guild, color_name)
-        if role:
-            async for member in ctx.guild.fetch_members(limit=None):
-                if role in member.roles:
-                    try:
-                        await member.remove_roles(role, reason="Holiday theme ended")
-                        removed += 1
-                    except:
-                        pass
-
+    removed = await clear_holiday_theme(ctx.guild)
     await ctx.followup.send(
         f"Removed all holiday roles from **{removed}** members.",
         ephemeral=True,
     )
-
-    await apply_icon_to_bot_and_server(ctx.guild, DEFAULT_ICON_URL)
 
 
 # ────────────────────── DEAD CHAT ROLE – CHANGE ROLE COLOR ONLY ──────────────────────
@@ -841,7 +876,7 @@ async def on_ready():
     await initialize_media_lists()
     bot.loop.create_task(birthday_checker())
     bot.loop.create_task(qotd_scheduler())
-    await init_gspread()
+    bot.loop.create_task(holiday_scheduler())
     print("QOTD scheduler started + Google Sheets ready!")
 
 @bot.event
