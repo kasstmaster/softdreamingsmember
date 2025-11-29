@@ -299,7 +299,7 @@ async def get_guild_birthdays(guild_id: int):
 async def build_birthday_embed(guild: discord.Guild) -> discord.Embed:
     birthdays = await get_guild_birthdays(guild.id)
     lines = [
-        f"`{mm_dd}` — **{guild.get_member(int(uid)).display_name if guild.get_member(int(uid)) else 'Unknown User'}**"
+        f"**{guild.get_member(int(uid)).display_name if guild.get_member(int(uid)) else 'Unknown User'}** — `{mm_dd}`"
         for uid, mm_dd in sorted(birthdays.items(), key=lambda x: x[1])
     ]
     description = "\n".join(lines) if lines else "No birthdays yet!"
