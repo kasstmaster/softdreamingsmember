@@ -311,7 +311,7 @@ async def build_birthday_embed(guild: discord.Guild) -> discord.Embed:
         title="OUR BIRTHDAYS!",
         description=description,
         color=0x2e2f33
-    )
+    ).set_footer(text="Messages in this channel are deleted after 5 minutes")
 
 async def get_birthday_public_location(guild_id: int):
     data = await _load_storage_message()
@@ -372,7 +372,7 @@ async def build_pool_embed(guild: discord.Guild) -> discord.Embed:
         title=movie_night_time(),
         description=description,
         color=0x2e2f33
-    )
+    ).set_footer(text="Messages in this channel are deleted after 5 minutes")
 
 async def update_pool_public_message(guild: discord.Guild):
     loc = pool_message_locations.get(guild.id)
