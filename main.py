@@ -648,7 +648,7 @@ async def pick(ctx, title: discord.Option(str, autocomplete=movie_autocomplete))
 
     if len(user_indices) >= MAX_POOL_ENTRIES_PER_USER:
         return await ctx.respond(
-            f"You already have `{MAX_POOL_ENTRIES_PER_USER}` pick(s) in the pool. Use `/pool_replace` to swap one of your picks.",
+            f"You already have `{MAX_POOL_ENTRIES_PER_USER}` pick(s) in the pool. Use `/pick_replace` to swap one of your picks.",
             ephemeral=True,
         )
 
@@ -660,8 +660,8 @@ async def pick(ctx, title: discord.Option(str, autocomplete=movie_autocomplete))
         ephemeral=True,
     )
 
-@bot.slash_command(name="pool_replace", description="Replace one of your picks in the pool")
-async def pool_replace(
+@bot.slash_command(name="pick_replace", description="Replace one of your picks in the pool")
+async def pick_replace(
     ctx,
     old_title: discord.Option(str, autocomplete=my_pool_movie_autocomplete),
     new_title: discord.Option(str, autocomplete=movie_autocomplete),
