@@ -476,6 +476,21 @@ async def movie_autocomplete(ctx: discord.AutocompleteContext):
     matches = [m for m in movie_titles if query in m.lower()]
     return matches[:25] or movie_titles[:25]
 
+async def my_pool_movie_autocomplete(ctx: discord.AutocompleteContext):
+    guild = ctx.interaction.guild
+    if guild is None:
+        return []
+    pool = request_pool.get(guild.id, [])
+    user_id = ctx.interaction.user.id
+    titles = []
+    for uid, title in pool:
+        if uid == user_id and title not in titles:
+            titles.append(title)
+    query = (ctx.value or "").lower()
+    if query:
+        titles = [t for t in titles if query in t.lower()]
+    return titles[:25]
+
 
 ############### BACKGROUND TASKS & SCHEDULERS ###############
 async def qotd_scheduler():
@@ -627,17 +642,16 @@ async def pick(ctx, title: discord.Option(str, autocomplete=movie_autocomplete))
     canon = next((t for t in movie_titles if t.lower() == title.strip().lower()), None)
     if not canon:
         return await ctx.respond("That movie isn't in the library.", ephemeral=True)
+
     pool = request_pool.setdefault(ctx.guild.id, [])
     user_indices = [i for i, (uid, _) in enumerate(pool) if uid == ctx.author.id]
+
     if len(user_indices) >= MAX_POOL_ENTRIES_PER_USER:
-        idx = user_indices[0]
-        pool[idx] = (ctx.author.id, canon)
-        await save_request_pool()
-        await update_pool_public_message(ctx.guild)
         return await ctx.respond(
-            f"You already have `{MAX_POOL_ENTRIES_PER_USER}` pick(s) in the pool, so I replaced one with **{canon}**.",
+            f"You already have `{MAX_POOL_ENTRIES_PER_USER}` pick(s) in the pool. Use `/pool_replace` to swap one of your picks.",
             ephemeral=True,
         )
+
     pool.append((ctx.author.id, canon))
     await save_request_pool()
     await update_pool_public_message(ctx.guild)
@@ -645,6 +659,33 @@ async def pick(ctx, title: discord.Option(str, autocomplete=movie_autocomplete))
         f"Added **{canon}** • You now have `{len(user_indices) + 1}` pick(s) in the pool.",
         ephemeral=True,
     )
+
+@bot.slash_command(name="pool_replace", description="Replace one of your picks in the pool")
+async def pool_replace(
+    ctx,
+    old_title: discord.Option(str, autocomplete=my_pool_movie_autocomplete),
+    new_title: discord.Option(str, autocomplete=movie_autocomplete),
+):
+    if not movie_titles:
+        return await ctx.respond("Movie list not loaded.", ephemeral=True)
+    canon_new = next((t for t in movie_titles if t.lower() == new_title.strip().lower()), None)
+    if not canon_new:
+        return await ctx.respond("That movie isn't in the library.", ephemeral=True)
+
+    pool = request_pool.get(ctx.guild.id, [])
+    if not pool:
+        return await ctx.respond("Pool is empty.", ephemeral=True)
+
+    indices = [i for i, (uid, title) in enumerate(pool) if uid == ctx.author.id and title == old_title]
+    if not indices:
+        return await ctx.respond("That pick is not in the pool as yours.", ephemeral=True)
+
+    idx = indices[0]
+    pool[idx] = (ctx.author.id, canon_new)
+    request_pool[ctx.guild.id] = pool
+    await save_request_pool()
+    await update_pool_public_message(ctx.guild)
+    await ctx.respond(f"Replaced **{old_title}** with **{canon_new}** in the pool.", ephemeral=True)
 
 @bot.slash_command(name="pool", description="See what movies have been added to todays pool")
 async def pool(ctx):
