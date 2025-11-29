@@ -76,6 +76,8 @@ DEFAULT_ICON_URL = os.getenv("DEFAULT_ICON_URL", "")
 
 MAX_POOL_ENTRIES_PER_USER = _env_int("MAX_POOL_ENTRIES_PER_USER", 3)
 
+BIRTHDAY_MEMBER_ROLE_ID = _env_int("BIRTHDAY_MEMBER_ROLE_ID", 0)
+
 CHRISTMAS_ROLES = {"Cranberry": "Admin", "lights": "Original Member", "Grinch": "Member", "Christmas": "Bots"}
 HALLOWEEN_ROLES = {"Cauldron": "Admin", "Candy": "Original Member", "Witchy": "Member", "Halloween": "Bots"}
 
@@ -261,6 +263,18 @@ async def initialize_media_lists():
         movie_titles = await _load_titles_from_channel(MOVIE_STORAGE_CHANNEL_ID)
     if TV_STORAGE_CHANNEL_ID:
         tv_titles = await _load_titles_from_channel(TV_STORAGE_CHANNEL_ID)
+
+async def ensure_birthday_member_role(guild: discord.Guild, member: discord.Member):
+    if BIRTHDAY_MEMBER_ROLE_ID == 0:
+        return
+    role = guild.get_role(BIRTHDAY_MEMBER_ROLE_ID)
+    if not role:
+        return
+    if role not in member.roles:
+        try:
+            await member.add_roles(role, reason="Shared birthday")
+        except:
+            pass
 
 async def set_birthday(guild_id: int, user_id: int, mm_dd: str):
     data = await _load_storage_message()
@@ -642,6 +656,7 @@ async def set_birthday_self(ctx, month: discord.Option(str, choices=MONTH_CHOICE
         return await ctx.respond("Invalid date.", ephemeral=True)
     await set_birthday(ctx.guild.id, ctx.author.id, mm_dd)
     await update_birthday_list_message(ctx.guild)
+    await ensure_birthday_member_role(ctx.guild, ctx.author)
     await ctx.respond(f"Birthday set to `{mm_dd}`!", ephemeral=True)
 
 @bot.slash_command(name="set_for", description="Add a birthday for a member")
@@ -653,6 +668,7 @@ async def set_for(ctx, member: discord.Member, month: discord.Option(str, choice
         return await ctx.respond("Invalid date.", ephemeral=True)
     await set_birthday(ctx.guild.id, member.id, mm_dd)
     await update_birthday_list_message(ctx.guild)
+    await ensure_birthday_member_role(ctx.guild, member)
     await ctx.respond(f"Set {member.mention}'s birthday to `{mm_dd}`", ephemeral=True)
 
 @bot.slash_command(name="remove_for", description="Remove a members birthday")
@@ -703,6 +719,27 @@ async def birthdays_public(ctx):
     msg = await ctx.channel.send(embed=embed)
     await set_birthday_public_location(ctx.guild.id, ctx.channel.id, msg.id)
     await ctx.respond("Created a new public birthday list message in this channel.", ephemeral=True)
+
+@bot.slash_command(name="birthday_role_sync", description="Give the birthday member role to everyone who has shared their birthday")
+async def birthday_role_sync(ctx):
+    if not (ctx.author.guild_permissions.administrator or ctx.guild.owner_id == ctx.author.id):
+        return await ctx.respond("Admin only.", ephemeral=True)
+    if BIRTHDAY_MEMBER_ROLE_ID == 0:
+        return await ctx.respond("Birthday member role ID is not configured.", ephemeral=True)
+    role = ctx.guild.get_role(BIRTHDAY_MEMBER_ROLE_ID)
+    if not role:
+        return await ctx.respond("Birthday member role not found.", ephemeral=True)
+    bdays = await get_guild_birthdays(ctx.guild.id)
+    count = 0
+    for user_id in bdays.keys():
+        member = ctx.guild.get_member(int(user_id))
+        if member and role not in member.roles:
+            try:
+                await member.add_roles(role, reason="Shared birthday")
+                count += 1
+            except:
+                pass
+    await ctx.respond(f"Synced birthday member role to {count} member(s).", ephemeral=True)
 
 @bot.slash_command(name="pick", description="Pick a movie to add to the pool")
 async def pick(ctx, title: discord.Option(str, autocomplete=movie_autocomplete)):
