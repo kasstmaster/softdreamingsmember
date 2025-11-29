@@ -1000,7 +1000,7 @@ async def pool_public(ctx):
             try:
                 msg = await channel.fetch_message(msg_id)
                 await msg.edit(embed=embed)
-                return await ctx.respond("Updated the existing public pool message.", ephemeral=True)
+                return await ctx.respond("Updated the public pool message.", ephemeral=True)
             except:
                 pass
     msg = await ctx.channel.send(embed=embed)
