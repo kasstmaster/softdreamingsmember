@@ -7,6 +7,7 @@ import discord
 import random as pyrandom
 import gspread
 from google.oauth2.service_account import Credentials
+import traceback
 
 # ───────────────────────── MONTH / DAY DROPDOWNS ─────────────────────────
 MONTH_CHOICES = [
@@ -223,92 +224,133 @@ async def movie_autocomplete(ctx: discord.AutocompleteContext):
 
 
 # ────────────────────── QUESTION OF THE DAY (Google Sheets) ──────────────────────
-gc = None
+GOOGLE_CREDS_RAW = os.getenv("GOOGLE_CREDENTIALS")
 SHEET_ID = os.getenv("GOOGLE_SHEET_ID")
 QOTD_CHANNEL_ID = int(os.getenv("QOTD_CHANNEL_ID", "0"))
 QOTD_TIME_HOUR = int(os.getenv("QOTD_TIME_HOUR", "10"))  # UTC hour
 
-async def init_gspread():
-    global gc
-    creds_json = os.getenv("GOOGLE_CREDENTIALS")
-    if not creds_json:
-        print("GOOGLE_CREDENTIALS not found in environment!")
-        return False
+gc = None
+
+if GOOGLE_CREDS_RAW and SHEET_ID:
     try:
-        creds_dict = json.loads(creds_json)
+        creds_dict = json.loads(GOOGLE_CREDS_RAW)
         creds = Credentials.from_service_account_info(
             creds_dict,
-            scopes=["https://www.googleapis.com/auth/spreadsheets"]
+            scopes=["https://www.googleapis.com/auth/spreadsheets"],
         )
         gc = gspread.authorize(creds)
-        print("Google Sheets connected successfully!")
-        return True
+        print("QOTD: Google Sheets client initialized.")
     except Exception as e:
-        print(f"Failed to connect to Google Sheets: {e}")
-        return False
+        print("QOTD init error:", repr(e))
+        traceback.print_exc()
+else:
+    print("QOTD disabled: missing GOOGLE_CREDENTIALS or GOOGLE_SHEET_ID")
+
 
 async def get_qotd_sheet_and_tab():
-    if gc is None:
-        await init_gspread()
-    if gc is None:
-        return None, None
+    """
+    Returns (worksheet, season_name).
+
+    Season logic:
+      - Oct–Nov -> 'Fall Season'
+      - Dec     -> 'Christmas'
+      - else    -> 'Regular'
+    Falls back to the first worksheet if the named tab doesn't exist.
+    """
+    if gc is None or not SHEET_ID:
+        raise RuntimeError("QOTD is not configured (no gc or SHEET_ID).")
+
     sh = gc.open_by_key(SHEET_ID)
     today = datetime.utcnow()
+
     if 10 <= today.month <= 11:
         tab = "Fall Season"
     elif today.month == 12:
         tab = "Christmas"
     else:
         tab = "Regular"
+
     try:
-        return sh.worksheet(tab), tab
-    except gspread.exceptions.WorksheetNotFound:
-        print(f"Worksheet '{tab}' not found! Falling back to 'Regular'")
-        return sh.worksheet("Regular"), "Regular"
+        ws = sh.worksheet(tab)
+    except gspread.WorksheetNotFound:
+        # Fallback: use first sheet
+        ws = sh.sheet1
+        tab = ws.title
+        print(f"QOTD: worksheet '{tab}' not found, using first sheet '{tab}' instead.")
+
+    return ws, tab
 
 
 async def post_daily_qotd():
-    if QOTD_CHANNEL_ID == 0:
+    """
+    Core QOTD logic. Raises exceptions on real errors so callers can handle them.
+    """
+    if gc is None or not SHEET_ID:
+        print("QOTD: Skipping because gc or SHEET_ID is not set.")
         return
+
+    if QOTD_CHANNEL_ID == 0:
+        print("QOTD: QOTD_CHANNEL_ID is 0; skipping.")
+        return
+
     channel = bot.get_channel(QOTD_CHANNEL_ID)
     if not channel:
+        print(f"QOTD: Could not find channel with ID {QOTD_CHANNEL_ID}.")
         return
 
     worksheet, season = await get_qotd_sheet_and_tab()
-    if worksheet is None:
-        print("QOTD skipped: Google Sheets not connected or worksheet missing")
-        return
 
+    # Read all rows
     all_vals = worksheet.get_all_values()
     if len(all_vals) < 2:
-        print("QOTD skipped: sheet is empty")
+        print("QOTD: Sheet has no data rows (only header or empty).")
         return
 
     questions = all_vals[1:]  # skip header row
-    unused = [row for row in questions if len(row) < 2 or not row[1].strip()]
 
-    if not unused:  # all used → reshuffle
+    # 'unused' = rows where col B is empty or missing
+    unused = [row for row in questions if len(row) < 2 or not (row[1] or "").strip()]
+
+    if not unused:
+        # Reset all B cells and treat all as unused
+        print("QOTD: All questions marked used; resetting column B.")
         worksheet.update("B2:B", [[""] for _ in range(len(questions))])
         unused = questions
 
+    # Choose a random unused row
     chosen = pyrandom.choice(unused)
+    # Ensure at least column A exists
+    if not chosen or not (chosen[0] or "").strip():
+        print("QOTD: Chosen row has no question text; skipping.")
+        return
+
     question = chosen[0].strip()
 
     # Seasonal styling
     colors = {"Regular": 0x9b59b6, "Fall Season": 0xe67e22, "Christmas": 0x00ff00}
-    emojis = {"Regular": "Question of the Day", "Fall Season": "Fall Question", "Christmas": "Christmas Question"}
+    emojis = {
+        "Regular": "Question of the Day",
+        "Fall Season": "Fall Question",
+        "Christmas": "Christmas Question",
+    }
 
     embed = discord.Embed(
         title=f"{emojis.get(season, 'Question of the Day')} Question of the Day",
         description=f"**{question}**",
-        color=colors.get(season, 0x9b59b6)
+        color=colors.get(season, 0x9b59b6),
     )
     embed.set_footer(text=f"{season} • Reply below!")
+
     await channel.send(embed=embed)
 
     # Mark as used
-    row_idx = questions.index(chosen) + 2
-    worksheet.update(f"B{row_idx}", [[f"Used {datetime.utcnow().strftime('%Y-%m-%d')}"]])
+    row_idx = questions.index(chosen) + 2  # +2 because of header & 1-based rows
+    worksheet.update(
+        f"B{row_idx}",
+        [[f"Used {datetime.utcnow().strftime('%Y-%m-%d')}"]],
+    )
+    print(f"QOTD: Posted question from row {row_idx} ({season}).")
+
 
 async def qotd_scheduler():
     await bot.wait_until_ready()
@@ -318,16 +360,30 @@ async def qotd_scheduler():
             try:
                 await post_daily_qotd()
             except Exception as e:
-                print(f"QOTD Error: {e}")
+                print("QOTD scheduler error:", repr(e))
+                traceback.print_exc()
         await asyncio.sleep(300)
+
 
 # Instant test command (admin only)
 @bot.slash_command(name="qotd_now", description="Post today's QOTD immediately (admin only)")
 async def qotd_now(ctx):
     if not (ctx.author.guild_permissions.administrator or ctx.guild.owner_id == ctx.author.id):
         return await ctx.respond("Admin only", ephemeral=True)
+
     await ctx.defer(ephemeral=True)
-    await post_daily_qotd()
+    try:
+        await post_daily_qotd()
+    except Exception as e:
+        # Log full traceback to Railway
+        print("QOTD_NOW ERROR:", repr(e))
+        traceback.print_exc()
+        # Tell you what went wrong
+        return await ctx.followup.send(
+            f"QOTD error: `{e}`\nCheck Railway logs for details.",
+            ephemeral=True,
+        )
+
     await ctx.followup.send("QOTD posted!", ephemeral=True)
 
 # ────────────────────── COMMANDS ──────────────────────
