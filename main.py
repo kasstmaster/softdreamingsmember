@@ -265,12 +265,21 @@ async def initialize_media_lists():
 async def set_birthday(guild_id: int, user_id: int, mm_dd: str):
     data = await _load_storage_message()
     gid = str(guild_id)
-    data.setdefault(gid, {})[str(user_id)] = mm_dd
+    entry = data.get(gid)
+    if entry is None:
+        entry = {"birthdays": {}}
+    elif not (isinstance(entry, dict) and isinstance(entry.get("birthdays"), dict)):
+        entry = {"birthdays": entry if isinstance(entry, dict) else {}}
+    entry["birthdays"][str(user_id)] = mm_dd
+    data[gid] = entry
     await _save_storage_message(data)
 
 async def get_guild_birthdays(guild_id: int):
     data = await _load_storage_message()
-    return data.get(str(guild_id), {})
+    entry = data.get(str(guild_id), {})
+    if isinstance(entry, dict) and isinstance(entry.get("birthdays"), dict):
+        return entry["birthdays"]
+    return entry if isinstance(entry, dict) else {}
 
 async def build_birthday_embed(guild: discord.Guild) -> discord.Embed:
     birthdays = await get_guild_birthdays(guild.id)
@@ -287,12 +296,42 @@ async def build_birthday_embed(guild: discord.Guild) -> discord.Embed:
     embed.description = "\n".join(lines)
     return embed
 
+async def get_birthday_public_location(guild_id: int):
+    data = await _load_storage_message()
+    entry = data.get(str(guild_id))
+    if isinstance(entry, dict):
+        pm = entry.get("public_message")
+        if isinstance(pm, dict):
+            ch_id = pm.get("channel_id")
+            msg_id = pm.get("message_id")
+            if isinstance(ch_id, int) and isinstance(msg_id, int):
+                return ch_id, msg_id
+    if BIRTHDAY_LIST_CHANNEL_ID and BIRTHDAY_LIST_MESSAGE_ID:
+        return BIRTHDAY_LIST_CHANNEL_ID, BIRTHDAY_LIST_MESSAGE_ID
+    return None
+
+async def set_birthday_public_location(guild_id: int, channel_id: int, message_id: int):
+    data = await _load_storage_message()
+    gid = str(guild_id)
+    entry = data.get(gid)
+    if entry is None:
+        entry = {"birthdays": {}}
+    elif not (isinstance(entry, dict) and isinstance(entry.get("birthdays"), dict)):
+        entry = {"birthdays": entry if isinstance(entry, dict) else {}}
+    entry["public_message"] = {"channel_id": channel_id, "message_id": message_id}
+    data[gid] = entry
+    await _save_storage_message(data)
+
 async def update_birthday_list_message(guild: discord.Guild):
-    channel = bot.get_channel(BIRTHDAY_LIST_CHANNEL_ID)
+    loc = await get_birthday_public_location(guild.id)
+    if not loc:
+        return
+    ch_id, msg_id = loc
+    channel = guild.get_channel(ch_id)
     if not channel:
         return
     try:
-        msg = await channel.fetch_message(BIRTHDAY_LIST_MESSAGE_ID)
+        msg = await channel.fetch_message(msg_id)
         embed = await build_birthday_embed(guild)
         await msg.edit(embed=embed, allowed_mentions=discord.AllowedMentions(users=True))
     except:
@@ -534,12 +573,11 @@ async def birthday_checker():
         now = datetime.utcnow()
         if now.hour == TARGET_HOUR_UTC and now.minute == TARGET_MINUTE:
             today = now.strftime("%m-%d")
-            data = await _load_storage_message()
             for guild in bot.guilds:
                 role = guild.get_role(BIRTHDAY_ROLE_ID)
                 if not role:
                     continue
-                bdays = data.get(str(guild.id), {})
+                bdays = await get_guild_birthdays(guild.id)
                 for member in guild.members:
                     if bdays.get(str(member.id)) == today:
                         if role not in member.roles:
@@ -623,8 +661,19 @@ async def remove_for(ctx, member: discord.Member):
     if not (ctx.author.guild_permissions.administrator or ctx.guild.owner_id == ctx.author.id):
         return await ctx.respond("Admin only.", ephemeral=True)
     data = await _load_storage_message()
-    gid, uid = str(ctx.guild.id), str(member.id)
-    if data.get(gid, {}).pop(uid, None):
+    gid = str(ctx.guild.id)
+    entry = data.get(gid)
+    removed = False
+    if isinstance(entry, dict):
+        if isinstance(entry.get("birthdays"), dict):
+            if entry["birthdays"].pop(str(member.id), None):
+                removed = True
+        else:
+            if entry.pop(str(member.id), None):
+                removed = True
+            entry = {"birthdays": entry}
+            data[gid] = entry
+    if removed:
         await _save_storage_message(data)
         await update_birthday_list_message(ctx.guild)
         await ctx.respond(f"Removed birthday for {member.mention}", ephemeral=True)
@@ -634,6 +683,27 @@ async def remove_for(ctx, member: discord.Member):
 @bot.slash_command(name="birthdays", description="View everyones birthdays")
 async def birthdays_cmd(ctx):
     await ctx.respond(embed=await build_birthday_embed(ctx.guild), ephemeral=True)
+
+@bot.slash_command(name="birthdays_public", description="Create or update the public birthday list message")
+async def birthdays_public(ctx):
+    if not (ctx.author.guild_permissions.administrator or ctx.guild.owner_id == ctx.author.id):
+        return await ctx.respond("Admin only.", ephemeral=True)
+    embed = await build_birthday_embed(ctx.guild)
+    loc = await get_birthday_public_location(ctx.guild.id)
+    if loc:
+        ch_id, msg_id = loc
+        channel = ctx.guild.get_channel(ch_id)
+        if channel:
+            try:
+                msg = await channel.fetch_message(msg_id)
+                await msg.edit(embed=embed, allowed_mentions=discord.AllowedMentions(users=True))
+                await ctx.respond("Updated the existing public birthday list message.", ephemeral=True)
+                return
+            except:
+                pass
+    msg = await ctx.channel.send(embed=embed)
+    await set_birthday_public_location(ctx.guild.id, ctx.channel.id, msg.id)
+    await ctx.respond("Created a new public birthday list message in this channel.", ephemeral=True)
 
 @bot.slash_command(name="pick", description="Pick a movie to add to the pool")
 async def pick(ctx, title: discord.Option(str, autocomplete=movie_autocomplete)):
