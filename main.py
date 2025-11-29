@@ -362,9 +362,9 @@ async def build_pool_embed(guild: discord.Guild) -> discord.Embed:
         for u, t in sorted_pool
     ]
     description = "\n".join(lines) if lines else "Pool is empty — be the first to add a movie!"
-    description += "\n\n**ADD TO THE POOL**\n"
-    description += "• </pick:1442305353030176800> - Browse and pick from the dropdown menu.\n"
-    description += "• </search:1444418642103107675> - Search if you already know what to pick."
+    description += "\n\n**ADD TO THE POOL**\n\n"
+    description += "• </pick:1442305353030176800> - Browse and pick from the dropdown menu\n\n"
+    description += "• </search:1444418642103107675> - If you already know what to pick"
     return discord.Embed(
         title=movie_night_time(),
         description=description,
