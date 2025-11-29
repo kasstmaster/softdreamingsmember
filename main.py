@@ -484,7 +484,6 @@ async def apply_icon_to_bot_and_server(guild: discord.Guild, url: str):
 
 
 ############### VIEWS / UI COMPONENTS ###############
-############### VIEWS / UI COMPONENTS ###############
 class MediaPagerView(discord.ui.View):
     def __init__(self, category: str, page: int = 0):
         super().__init__(timeout=120)
@@ -502,18 +501,23 @@ class MediaPagerView(discord.ui.View):
     def _items(self):
         return movie_titles if self.category == "movies" else tv_titles
 
+    def _page_size(self):
+        return min(PAGE_SIZE, 25)
+
     def _max_page(self):
         items = self._items()
         if not items:
             return 0
-        return max(0, (len(items) - 1) // PAGE_SIZE)
+        size = self._page_size()
+        return max(0, (len(items) - 1) // size)
 
     def _page_slice(self):
         items = self._items()
+        size = self._page_size()
         max_page = self._max_page()
         self.page = max(0, min(self.page, max_page))
-        start = self.page * PAGE_SIZE
-        end = start + PAGE_SIZE
+        start = self.page * size
+        end = start + size
         return items[start:end], start
 
     def _build_content(self):
