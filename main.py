@@ -867,19 +867,16 @@ async def random_pick(ctx):
     member = ctx.guild.get_member(user_id)
     await ctx.respond(f"Random Pick: **{title}**\nRequested by {member.mention if member else '<@'+str(user_id)+'>'}")
 
-@bot.slash_command(name="pick", description="Browse the movie collection and add picks to today's pool")
-async def pick_browser(
-    ctx,
-    category: discord.Option(str, "Category", choices=["movies", "shows"], required=False) = "movies"
-    if ENABLE_TV_IN_PICK else discord.utils.missing
-):
-    if not ENABLE_TV_IN_PICK:
-        category = "movies"
-    items = movie_titles if category == "movies" else tv_titles
-    if not items:
-        return await ctx.respond(f"No {category} loaded.", ephemeral=True)
-    view = MediaPagerView(category)
-    await view.send_initial(ctx)
+if ENABLE_TV_IN_PICK:
+    @bot.slash_command(name="pick", description="Browse the movie or TV collection and add picks to today's pool")
+    async def pick_browser(ctx, category: discord.Option(str, choices=["movies", "shows"], default="movies")):
+        view = MediaPagerView(category)
+        await view.send_initial(ctx)
+else:
+    @bot.slash_command(name="pick", description="Browse the movie collection and add picks to today's pool")
+    async def pick_browser(ctx):
+        view = MediaPagerView("movies")
+        await view.send_initial(ctx)
 
 @bot.slash_command(name="media_add")
 async def media_add(ctx, category: discord.Option(str, choices=["movies", "shows"]), title: str):
