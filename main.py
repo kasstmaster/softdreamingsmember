@@ -228,7 +228,9 @@ async def load_request_pool():
 
 async def save_request_pool():
     raw = {}
-    for gid, pool in request_pool.items():
+    all_gids = set(request_pool.keys()) | set(pool_message_locations.keys())
+    for gid in all_gids:
+        pool = request_pool.get(gid, [])
         obj = {}
         obj["entries"] = [[uid, title] for (uid, title) in pool]
         loc = pool_message_locations.get(gid)
