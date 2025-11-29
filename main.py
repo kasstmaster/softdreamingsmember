@@ -95,6 +95,7 @@ PAGE_SIZE = 25
 ############### GLOBAL STATE / STORAGE ###############
 storage_message_id: int | None = None
 pool_storage_message_id: int | None = None
+pool_message_locations: dict[int, tuple[int, int]] = {}
 movie_titles: list[str] = []
 tv_titles: list[str] = []
 request_pool: dict[int, list[tuple[int, str]]] = {}
@@ -187,31 +188,54 @@ async def _save_pool_message(data: dict):
         pass
 
 async def load_request_pool():
-    global request_pool
+    global request_pool, pool_message_locations
     raw = await _load_pool_message()
     request_pool = {}
-    for gid_str, entries in raw.items():
+    pool_message_locations = {}
+    for gid_str, payload in raw.items():
         try:
             gid = int(gid_str)
         except:
             continue
+        entries = []
+        message_info = None
+        if isinstance(payload, list):
+            entries = payload
+        elif isinstance(payload, dict):
+            if isinstance(payload.get("entries"), list):
+                entries = payload["entries"]
+            message_info = payload.get("message")
         pool_list = []
-        if isinstance(entries, list):
-            for item in entries:
-                if isinstance(item, list) and len(item) == 2:
-                    uid, title = item
-                    try:
-                        uid_int = int(uid)
-                    except:
-                        continue
-                    pool_list.append((uid_int, str(title)))
+        for item in entries:
+            if isinstance(item, list) and len(item) == 2:
+                uid, title = item
+                try:
+                    uid_int = int(uid)
+                except:
+                    continue
+                pool_list.append((uid_int, str(title)))
         if pool_list:
             request_pool[gid] = pool_list
+        if isinstance(message_info, dict):
+            ch_id = message_info.get("channel_id")
+            msg_id = message_info.get("message_id")
+            try:
+                ch_id = int(ch_id)
+                msg_id = int(msg_id)
+            except:
+                continue
+            pool_message_locations[gid] = (ch_id, msg_id)
 
 async def save_request_pool():
     raw = {}
     for gid, pool in request_pool.items():
-        raw[str(gid)] = [[uid, title] for (uid, title) in pool]
+        obj = {}
+        obj["entries"] = [[uid, title] for (uid, title) in pool]
+        loc = pool_message_locations.get(gid)
+        if loc:
+            ch_id, msg_id = loc
+            obj["message"] = {"channel_id": ch_id, "message_id": msg_id}
+        raw[str(gid)] = obj
     await _save_pool_message(raw)
 
 async def _load_titles_from_channel(channel_id: int) -> list[str]:
@@ -267,6 +291,32 @@ async def update_birthday_list_message(guild: discord.Guild):
         msg = await channel.fetch_message(BIRTHDAY_LIST_MESSAGE_ID)
         embed = await build_birthday_embed(guild)
         await msg.edit(embed=embed, allowed_mentions=discord.AllowedMentions(users=True))
+    except:
+        pass
+
+async def build_pool_embed(guild: discord.Guild) -> discord.Embed:
+    pool = request_pool.get(guild.id, [])
+    if not pool:
+        return discord.Embed(title="Current Pool", description="Pool is empty.", color=0x2e2f33)
+    lines = []
+    for user_id, title in pool:
+        member = guild.get_member(user_id)
+        mention = member.mention if member else "<@"+str(user_id)+">"
+        lines.append(f"• **{title}** — {mention}")
+    return discord.Embed(title="Current Pool", description="\n".join(lines), color=0x2e2f33)
+
+async def update_pool_public_message(guild: discord.Guild):
+    loc = pool_message_locations.get(guild.id)
+    if not loc:
+        return
+    ch_id, msg_id = loc
+    channel = guild.get_channel(ch_id)
+    if not channel:
+        return
+    try:
+        msg = await channel.fetch_message(msg_id)
+        embed = await build_pool_embed(guild)
+        await msg.edit(embed=embed)
     except:
         pass
 
@@ -576,15 +626,13 @@ async def pick(ctx, title: discord.Option(str, autocomplete=movie_autocomplete))
     pool = request_pool.setdefault(ctx.guild.id, [])
     pool.append((ctx.author.id, canon))
     await save_request_pool()
+    await update_pool_public_message(ctx.guild)
     await ctx.respond(f"Added **{canon}** • Pool size: `{len(pool)}`", ephemeral=True)
 
 @bot.slash_command(name="pool", description="See what movies have been added to todays pool")
 async def pool(ctx):
-    pool = request_pool.get(ctx.guild.id, [])
-    if not pool:
-        return await ctx.respond("Pool is empty.", ephemeral=True)
-    lines = [f"• **{t}** — {ctx.guild.get_member(u).mention if ctx.guild.get_member(u) else '<@'+str(u)+'>'}" for u, t in pool]
-    await ctx.respond(embed=discord.Embed(title="Current Pool", description="\n".join(lines), color=0x2e2f33), ephemeral=True)
+    embed = await build_pool_embed(ctx.guild)
+    await ctx.respond(embed=embed, ephemeral=True)
 
 @bot.slash_command(name="random", description="The bot will choose a random movie from the pool")
 async def random_pick(ctx):
@@ -594,6 +642,7 @@ async def random_pick(ctx):
     user_id, title = pyrandom.choice(pool)
     request_pool[ctx.guild.id] = []
     await save_request_pool()
+    await update_pool_public_message(ctx.guild)
     member = ctx.guild.get_member(user_id)
     await ctx.respond(f"Random Pick: **{title}**\nRequested by {member.mention if member else '<@'+str(user_id)+'>'}")
 
@@ -674,6 +723,27 @@ async def qotd_now(ctx):
         traceback.print_exc()
         return await ctx.followup.send(f"QOTD error: `{type(e).__name__}` – `{repr(e)}`", ephemeral=True)
     await ctx.followup.send("QOTD posted!", ephemeral=True)
+
+@bot.slash_command(name="pool_public", description="Create or update the public pool message")
+async def pool_public(ctx):
+    if not (ctx.author.guild_permissions.administrator or ctx.guild.owner_id == ctx.author.id):
+        return await ctx.respond("Admin only.", ephemeral=True)
+    embed = await build_pool_embed(ctx.guild)
+    loc = pool_message_locations.get(ctx.guild.id)
+    if loc:
+        ch_id, msg_id = loc
+        channel = ctx.guild.get_channel(ch_id)
+        if channel:
+            try:
+                msg = await channel.fetch_message(msg_id)
+                await msg.edit(embed=embed)
+                return await ctx.respond("Updated the existing public pool message.", ephemeral=True)
+            except:
+                pass
+    msg = await ctx.channel.send(embed=embed)
+    pool_message_locations[ctx.guild.id] = (ctx.channel.id, msg.id)
+    await save_request_pool()
+    await ctx.respond("Created a new public pool message in this channel.", ephemeral=True)
 
 
 ############### ON_READY & BOT START ###############
