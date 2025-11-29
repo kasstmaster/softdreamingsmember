@@ -298,13 +298,15 @@ async def get_guild_birthdays(guild_id: int):
 
 async def build_birthday_embed(guild: discord.Guild) -> discord.Embed:
     birthdays = await get_guild_birthdays(guild.id)
-    lines = [
-        f"**{guild.get_member(int(uid)).display_name if guild.get_member(int(uid)) else 'Unknown User'}** — `{mm_dd}`"
-        for uid, mm_dd in sorted(birthdays.items(), key=lambda x: x[1])
-    ]
+    lines = []
+    for user_id, mm_dd in sorted(birthdays.items(), key=lambda x: x[1]):
+        member = guild.get_member(int(user_id))
+        if member:
+            lines.append(f"{member.mention} — `{mm_dd}`")
+        else:
+            lines.append(f"<@{user_id}> — `{mm_dd}`")
     description = "\n".join(lines) if lines else "No birthdays yet!"
-    description += "\n\n**SHARE YOUR BIRTHDAY**\n"
-    description += "• </set:1440919374310408234> - Add your birthday to the server’s shared birthday list."
+    description += "\n\n**SHARE YOUR BIRTHDAY**\n• </set:1440919374310408234> - Add your birthday to the server’s shared birthday list."
     return discord.Embed(
         title="OUR BIRTHDAYS!",
         description=description,
