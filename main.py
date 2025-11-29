@@ -359,7 +359,7 @@ async def build_pool_embed(guild: discord.Guild) -> discord.Embed:
     for user_id, title in pool:
         member = guild.get_member(user_id)
         mention = member.mention if member else "<@"+str(user_id)+">"
-        lines.append(f"• **{title}** — {mention}")
+        lines.append(f"• {mention} — **{title}**")
     return discord.Embed(title="Todays Movie Pool", description="\n".join(lines), color=0x2e2f33)
 
 async def update_pool_public_message(guild: discord.Guild):
