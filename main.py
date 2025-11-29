@@ -74,6 +74,8 @@ CHRISTMAS_ICON_URL = os.getenv("CHRISTMAS_ICON_URL", "")
 HALLOWEEN_ICON_URL = os.getenv("HALLOWEEN_ICON_URL", "")
 DEFAULT_ICON_URL = os.getenv("DEFAULT_ICON_URL", "")
 
+MAX_POOL_ENTRIES_PER_USER = _env_int("MAX_POOL_ENTRIES_PER_USER", 3)
+
 CHRISTMAS_ROLES = {"Cranberry": "Admin", "lights": "Original Member", "Grinch": "Member", "Christmas": "Bots"}
 HALLOWEEN_ROLES = {"Cauldron": "Admin", "Candy": "Original Member", "Witchy": "Member", "Halloween": "Bots"}
 
@@ -626,10 +628,23 @@ async def pick(ctx, title: discord.Option(str, autocomplete=movie_autocomplete))
     if not canon:
         return await ctx.respond("That movie isn't in the library.", ephemeral=True)
     pool = request_pool.setdefault(ctx.guild.id, [])
+    user_indices = [i for i, (uid, _) in enumerate(pool) if uid == ctx.author.id]
+    if len(user_indices) >= MAX_POOL_ENTRIES_PER_USER:
+        idx = user_indices[0]
+        pool[idx] = (ctx.author.id, canon)
+        await save_request_pool()
+        await update_pool_public_message(ctx.guild)
+        return await ctx.respond(
+            f"You already have `{MAX_POOL_ENTRIES_PER_USER}` pick(s) in the pool, so I replaced one with **{canon}**.",
+            ephemeral=True,
+        )
     pool.append((ctx.author.id, canon))
     await save_request_pool()
     await update_pool_public_message(ctx.guild)
-    await ctx.respond(f"Added **{canon}** • Pool size: `{len(pool)}`", ephemeral=True)
+    return await ctx.respond(
+        f"Added **{canon}** • You now have `{len(user_indices) + 1}` pick(s) in the pool.",
+        ephemeral=True,
+    )
 
 @bot.slash_command(name="pool", description="See what movies have been added to todays pool")
 async def pool(ctx):
