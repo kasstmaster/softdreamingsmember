@@ -74,6 +74,10 @@ CHRISTMAS_ICON_URL = os.getenv("CHRISTMAS_ICON_URL", "")
 HALLOWEEN_ICON_URL = os.getenv("HALLOWEEN_ICON_URL", "")
 DEFAULT_ICON_URL = os.getenv("DEFAULT_ICON_URL", "")
 
+MAX_POOL_ENTRIES_PER_USER = _env_int("MAX_POOL_ENTRIES_PER_USER", 3)
+
+BIRTHDAY_MEMBER_ROLE_ID = _env_int("BIRTHDAY_MEMBER_ROLE_ID", 0)
+
 CHRISTMAS_ROLES = {"Cranberry": "Admin", "lights": "Original Member", "Grinch": "Member", "Christmas": "Bots"}
 HALLOWEEN_ROLES = {"Cauldron": "Admin", "Candy": "Original Member", "Witchy": "Member", "Halloween": "Bots"}
 
@@ -94,6 +98,8 @@ PAGE_SIZE = 25
 
 ############### GLOBAL STATE / STORAGE ###############
 storage_message_id: int | None = None
+pool_storage_message_id: int | None = None
+pool_message_locations: dict[int, tuple[int, int]] = {}
 movie_titles: list[str] = []
 tv_titles: list[str] = []
 request_pool: dict[int, list[tuple[int, str]]] = {}
@@ -107,16 +113,28 @@ def build_mm_dd(month_name: str, day: int) -> str | None:
     return f"{month_num}-{day:02d}"
 
 async def initialize_storage_message():
-    global storage_message_id
+    global storage_message_id, pool_storage_message_id
     channel = bot.get_channel(BIRTHDAY_STORAGE_CHANNEL_ID)
     if not channel:
         return
-    async for msg in channel.history(limit=50):
-        if msg.author == bot.user:
-            storage_message_id = msg.id
-            return
-    msg = await channel.send("{}")
-    storage_message_id = msg.id
+    birthday_msg = None
+    pool_msg = None
+    async for msg in channel.history(limit=50, oldest_first=True):
+        if msg.author != bot.user:
+            continue
+        content = (msg.content or "").strip()
+        if content.startswith("POOL_DATA:"):
+            pool_msg = msg
+        else:
+            birthday_msg = msg
+        if birthday_msg and pool_msg:
+            break
+    if birthday_msg is None:
+        birthday_msg = await channel.send("{}")
+    if pool_msg is None:
+        pool_msg = await channel.send("POOL_DATA: {}")
+    storage_message_id = birthday_msg.id
+    pool_storage_message_id = pool_msg.id
 
 async def _load_storage_message() -> dict:
     global storage_message_id
@@ -144,6 +162,88 @@ async def _save_storage_message(data: dict):
     except:
         pass
 
+async def _load_pool_message() -> dict:
+    global pool_storage_message_id
+    channel = bot.get_channel(BIRTHDAY_STORAGE_CHANNEL_ID)
+    if not channel or pool_storage_message_id is None:
+        return {}
+    try:
+        msg = await channel.fetch_message(pool_storage_message_id)
+        content = (msg.content or "").strip()
+        if content.startswith("POOL_DATA:"):
+            content = content[len("POOL_DATA:"):].strip()
+        data = json.loads(content or "{}")
+        return data if isinstance(data, dict) else {}
+    except:
+        return {}
+
+async def _save_pool_message(data: dict):
+    global pool_storage_message_id
+    channel = bot.get_channel(BIRTHDAY_STORAGE_CHANNEL_ID)
+    if not channel or pool_storage_message_id is None:
+        return
+    try:
+        msg = await channel.fetch_message(pool_storage_message_id)
+        text = "POOL_DATA: " + json.dumps(data, separators=(",", ":"))
+        if len(text) > 1900:
+            text = text[:1900]
+        await msg.edit(content=text)
+    except:
+        pass
+
+async def load_request_pool():
+    global request_pool, pool_message_locations
+    raw = await _load_pool_message()
+    request_pool = {}
+    pool_message_locations = {}
+    for gid_str, payload in raw.items():
+        try:
+            gid = int(gid_str)
+        except:
+            continue
+        entries = []
+        message_info = None
+        if isinstance(payload, list):
+            entries = payload
+        elif isinstance(payload, dict):
+            if isinstance(payload.get("entries"), list):
+                entries = payload["entries"]
+            message_info = payload.get("message")
+        pool_list = []
+        for item in entries:
+            if isinstance(item, list) and len(item) == 2:
+                uid, title = item
+                try:
+                    uid_int = int(uid)
+                except:
+                    continue
+                pool_list.append((uid_int, str(title)))
+        if pool_list:
+            request_pool[gid] = pool_list
+        if isinstance(message_info, dict):
+            ch_id = message_info.get("channel_id")
+            msg_id = message_info.get("message_id")
+            try:
+                ch_id = int(ch_id)
+                msg_id = int(msg_id)
+            except:
+                continue
+            pool_message_locations[gid] = (ch_id, msg_id)
+
+async def save_request_pool():
+    raw = {}
+    all_gids = set(request_pool.keys()) | set(pool_message_locations.keys())
+    for gid in all_gids:
+        pool = request_pool.get(gid, [])
+        obj = {}
+        obj["entries"] = [[uid, title] for (uid, title) in pool]
+        loc = pool_message_locations.get(gid)
+        if loc:
+            ch_id, msg_id = loc
+            obj["message"] = {"channel_id": ch_id, "message_id": msg_id}
+        raw[str(gid)] = obj
+    await _save_pool_message(raw)
+
 async def _load_titles_from_channel(channel_id: int) -> list[str]:
     ch = bot.get_channel(channel_id)
     if not isinstance(ch, discord.TextChannel):
@@ -164,39 +264,115 @@ async def initialize_media_lists():
     if TV_STORAGE_CHANNEL_ID:
         tv_titles = await _load_titles_from_channel(TV_STORAGE_CHANNEL_ID)
 
+async def ensure_birthday_member_role(guild: discord.Guild, member: discord.Member):
+    if BIRTHDAY_MEMBER_ROLE_ID == 0:
+        return
+    role = guild.get_role(BIRTHDAY_MEMBER_ROLE_ID)
+    if not role:
+        return
+    if role not in member.roles:
+        try:
+            await member.add_roles(role, reason="Shared birthday")
+        except:
+            pass
+
 async def set_birthday(guild_id: int, user_id: int, mm_dd: str):
     data = await _load_storage_message()
     gid = str(guild_id)
-    data.setdefault(gid, {})[str(user_id)] = mm_dd
+    entry = data.get(gid)
+    if entry is None:
+        entry = {"birthdays": {}}
+    elif not (isinstance(entry, dict) and isinstance(entry.get("birthdays"), dict)):
+        entry = {"birthdays": entry if isinstance(entry, dict) else {}}
+    entry["birthdays"][str(user_id)] = mm_dd
+    data[gid] = entry
     await _save_storage_message(data)
 
 async def get_guild_birthdays(guild_id: int):
     data = await _load_storage_message()
-    return data.get(str(guild_id), {})
+    entry = data.get(str(guild_id), {})
+    if isinstance(entry, dict) and isinstance(entry.get("birthdays"), dict):
+        return entry["birthdays"]
+    return entry if isinstance(entry, dict) else {}
 
 async def build_birthday_embed(guild: discord.Guild) -> discord.Embed:
     birthdays = await get_guild_birthdays(guild.id)
     embed = discord.Embed(title="Our Birthdays!", color=0x2e2f33)
     if not birthdays:
-        embed.description = "No birthdays set yet.\nUse </set:1440919374310408234> to add yours!"
+        embed.description = "No birthdays set yet."
         return embed
     lines = []
     for user_id, mm_dd in sorted(birthdays.items(), key=lambda x: x[1]):
         member = guild.get_member(int(user_id))
         name = member.display_name if member else "Unknown User"
         lines.append(f"`{mm_dd}` — **{name}**")
-    lines.append("\nUse </set:1440919374310408234> to add yours!")
     embed.description = "\n".join(lines)
     return embed
 
+async def get_birthday_public_location(guild_id: int):
+    data = await _load_storage_message()
+    entry = data.get(str(guild_id))
+    if isinstance(entry, dict):
+        pm = entry.get("public_message")
+        if isinstance(pm, dict):
+            ch_id = pm.get("channel_id")
+            msg_id = pm.get("message_id")
+            if isinstance(ch_id, int) and isinstance(msg_id, int):
+                return ch_id, msg_id
+    if BIRTHDAY_LIST_CHANNEL_ID and BIRTHDAY_LIST_MESSAGE_ID:
+        return BIRTHDAY_LIST_CHANNEL_ID, BIRTHDAY_LIST_MESSAGE_ID
+    return None
+
+async def set_birthday_public_location(guild_id: int, channel_id: int, message_id: int):
+    data = await _load_storage_message()
+    gid = str(guild_id)
+    entry = data.get(gid)
+    if entry is None:
+        entry = {"birthdays": {}}
+    elif not (isinstance(entry, dict) and isinstance(entry.get("birthdays"), dict)):
+        entry = {"birthdays": entry if isinstance(entry, dict) else {}}
+    entry["public_message"] = {"channel_id": channel_id, "message_id": message_id}
+    data[gid] = entry
+    await _save_storage_message(data)
+
 async def update_birthday_list_message(guild: discord.Guild):
-    channel = bot.get_channel(BIRTHDAY_LIST_CHANNEL_ID)
+    loc = await get_birthday_public_location(guild.id)
+    if not loc:
+        return
+    ch_id, msg_id = loc
+    channel = guild.get_channel(ch_id)
     if not channel:
         return
     try:
-        msg = await channel.fetch_message(BIRTHDAY_LIST_MESSAGE_ID)
+        msg = await channel.fetch_message(msg_id)
         embed = await build_birthday_embed(guild)
         await msg.edit(embed=embed, allowed_mentions=discord.AllowedMentions(users=True))
+    except:
+        pass
+
+async def build_pool_embed(guild: discord.Guild) -> discord.Embed:
+    pool = request_pool.get(guild.id, [])
+    if not pool:
+        return discord.Embed(title="Todays Movie Pool", description="Pool is empty.", color=0x2e2f33)
+    lines = []
+    for user_id, title in pool:
+        member = guild.get_member(user_id)
+        mention = member.mention if member else "<@"+str(user_id)+">"
+        lines.append(f"• **{title}** — {mention}")
+    return discord.Embed(title="Todays Movie Pool", description="\n".join(lines), color=0x2e2f33)
+
+async def update_pool_public_message(guild: discord.Guild):
+    loc = pool_message_locations.get(guild.id)
+    if not loc:
+        return
+    ch_id, msg_id = loc
+    channel = guild.get_channel(ch_id)
+    if not channel:
+        return
+    try:
+        msg = await channel.fetch_message(msg_id)
+        embed = await build_pool_embed(guild)
+        await msg.edit(embed=embed)
     except:
         pass
 
@@ -352,6 +528,21 @@ async def movie_autocomplete(ctx: discord.AutocompleteContext):
     matches = [m for m in movie_titles if query in m.lower()]
     return matches[:25] or movie_titles[:25]
 
+async def my_pool_movie_autocomplete(ctx: discord.AutocompleteContext):
+    guild = ctx.interaction.guild
+    if guild is None:
+        return []
+    pool = request_pool.get(guild.id, [])
+    user_id = ctx.interaction.user.id
+    titles = []
+    for uid, title in pool:
+        if uid == user_id and title not in titles:
+            titles.append(title)
+    query = (ctx.value or "").lower()
+    if query:
+        titles = [t for t in titles if query in t.lower()]
+    return titles[:25]
+
 
 ############### BACKGROUND TASKS & SCHEDULERS ###############
 async def qotd_scheduler():
@@ -395,12 +586,11 @@ async def birthday_checker():
         now = datetime.utcnow()
         if now.hour == TARGET_HOUR_UTC and now.minute == TARGET_MINUTE:
             today = now.strftime("%m-%d")
-            data = await _load_storage_message()
             for guild in bot.guilds:
                 role = guild.get_role(BIRTHDAY_ROLE_ID)
                 if not role:
                     continue
-                bdays = data.get(str(guild.id), {})
+                bdays = await get_guild_birthdays(guild.id)
                 for member in guild.members:
                     if bdays.get(str(member.id)) == today:
                         if role not in member.roles:
@@ -418,6 +608,7 @@ async def on_ready():
     print(f"{bot.user} online!")
     await initialize_storage_message()
     await initialize_media_lists()
+    await load_request_pool()
     bot.loop.create_task(birthday_checker())
     bot.loop.create_task(qotd_scheduler())
     bot.loop.create_task(holiday_scheduler())
@@ -432,21 +623,6 @@ async def on_member_join(member):
 
 
 ############### COMMAND GROUPS ###############
-@bot.slash_command(name="info", description="Show all bot features")
-async def info(ctx: discord.ApplicationContext):
-    MEMBERS_ICON = "https://images-ext-1.discordapp.net/external/2i-PtcLgl_msR0VTT2mGn_5dtQiC9DK56PxR4uJfCLI/%3Fsize%3D1024/https/cdn.discordapp.com/avatars/1440914703894188122/ff746b98459152a0ba7c4eff5530cd9d.png?format=webp&quality=lossless&width=534&height=534"
-    embed = discord.Embed(title="Members - Bot Features", description="Here's everything I can do in this server!", color=0x00e1ff)
-    embed.add_field(name="Birthday System", value="• </set:1440919374310408234> - Members can set their birthday\n• </set_for:1440919374310408235> - Admins can set birthdays for others\n• </remove_for:1440954448468774922> - Admins can remove birthdays\n• </birthdays:1440919374310408236> - Shows the full birthday list\n• Auto-updated public birthday list message\n• Birthday role is given on your day and removed afterward\n• New members get a welcome DM with a link to add their birthday", inline=False)
-    embed.add_field(name="Movie & TV Night", value="• Maintains a server-wide library of movies and TV shows\n• </list:1442017846589653014> – Browse movies or shows (paged list)\n• </pick:1442305353030176800> – Add your movie pick to the pool\n• </pool:1442311836497350656> – See the current request pool\n• </random:1442017303230156963> – Randomly pick a movie from the pool and clear it\n• </media_add:1441698665981939825> – Admins can add new movies/shows to the library", inline=False)
-    embed.add_field(name="Holiday Themes", value="• </holiday_add:1442616885802832115> – Apply a holiday server theme\n ┣ Matches special roles (Admin / Original Member / Member)\n ┗ Gives themed roles like **Grinch**, **Cranberry**, **lights**, **Cauldron**, **Candy**, **Witchy**\n• </holiday_remove:1442616885802832116> – Remove the holiday server theme", inline=False)
-    embed.add_field(name="Dead Chat Role Color Cycle", value="• </color:1442666939842433125> – Changes the color of the **Dead Chat** role\n• Only people who already have the Dead Chat role can use it\n• Cycles through a set of bright colors for everyone with that role\n• Uses either the configured role ID or fallback name to find the role", inline=False)
-    embed.add_field(name="Member & Admin Utilities", value="• </say:1440927430209703986> – Admins can make the bot say a message in any channel\n• </commands:1442619988635549801> – Quick reference for admin-only commands", inline=False)
-    embed.add_field(name="Automatic Tasks", value="• Loads birthday data and media lists when the bot comes online\n• Checks birthdays every hour and updates the Birthday role automatically\n• Sends a birthday-list link DM to new members when they join", inline=False)
-    embed.add_field(name="Question of the Day", value="• Automatically posts a daily Question of the Day in the configured channel\n• Pulls questions from your Google Sheet (organized by seasons)\n• Tracks used questions and resets when all are used\n• </qotd_now:1444114293170765845> – Admins can post a QOTD immediately", inline=False)
-    embed.set_thumbnail(url=MEMBERS_ICON)
-    embed.set_footer(text="• Bot by Soft Dreamings", icon_url=MEMBERS_ICON)
-    await ctx.respond(embed=embed)
-
 @bot.slash_command(name="commands", description="Admin / Announcer commands")
 async def commands(ctx):
     if not (ctx.author.guild_permissions.administrator or ctx.guild.owner_id == ctx.author.id):
@@ -465,6 +641,7 @@ async def set_birthday_self(ctx, month: discord.Option(str, choices=MONTH_CHOICE
         return await ctx.respond("Invalid date.", ephemeral=True)
     await set_birthday(ctx.guild.id, ctx.author.id, mm_dd)
     await update_birthday_list_message(ctx.guild)
+    await ensure_birthday_member_role(ctx.guild, ctx.author)
     await ctx.respond(f"Birthday set to `{mm_dd}`!", ephemeral=True)
 
 @bot.slash_command(name="set_for", description="Add a birthday for a member")
@@ -476,6 +653,7 @@ async def set_for(ctx, member: discord.Member, month: discord.Option(str, choice
         return await ctx.respond("Invalid date.", ephemeral=True)
     await set_birthday(ctx.guild.id, member.id, mm_dd)
     await update_birthday_list_message(ctx.guild)
+    await ensure_birthday_member_role(ctx.guild, member)
     await ctx.respond(f"Set {member.mention}'s birthday to `{mm_dd}`", ephemeral=True)
 
 @bot.slash_command(name="remove_for", description="Remove a members birthday")
@@ -483,8 +661,19 @@ async def remove_for(ctx, member: discord.Member):
     if not (ctx.author.guild_permissions.administrator or ctx.guild.owner_id == ctx.author.id):
         return await ctx.respond("Admin only.", ephemeral=True)
     data = await _load_storage_message()
-    gid, uid = str(ctx.guild.id), str(member.id)
-    if data.get(gid, {}).pop(uid, None):
+    gid = str(ctx.guild.id)
+    entry = data.get(gid)
+    removed = False
+    if isinstance(entry, dict):
+        if isinstance(entry.get("birthdays"), dict):
+            if entry["birthdays"].pop(str(member.id), None):
+                removed = True
+        else:
+            if entry.pop(str(member.id), None):
+                removed = True
+            entry = {"birthdays": entry}
+            data[gid] = entry
+    if removed:
         await _save_storage_message(data)
         await update_birthday_list_message(ctx.guild)
         await ctx.respond(f"Removed birthday for {member.mention}", ephemeral=True)
@@ -495,6 +684,48 @@ async def remove_for(ctx, member: discord.Member):
 async def birthdays_cmd(ctx):
     await ctx.respond(embed=await build_birthday_embed(ctx.guild), ephemeral=True)
 
+@bot.slash_command(name="birthdays_public", description="Create or update the public birthday list message")
+async def birthdays_public(ctx):
+    if not (ctx.author.guild_permissions.administrator or ctx.guild.owner_id == ctx.author.id):
+        return await ctx.respond("Admin only.", ephemeral=True)
+    embed = await build_birthday_embed(ctx.guild)
+    loc = await get_birthday_public_location(ctx.guild.id)
+    if loc:
+        ch_id, msg_id = loc
+        channel = ctx.guild.get_channel(ch_id)
+        if channel:
+            try:
+                msg = await channel.fetch_message(msg_id)
+                await msg.edit(embed=embed, allowed_mentions=discord.AllowedMentions(users=True))
+                await ctx.respond("Updated the existing public birthday list message.", ephemeral=True)
+                return
+            except:
+                pass
+    msg = await ctx.channel.send(embed=embed)
+    await set_birthday_public_location(ctx.guild.id, ctx.channel.id, msg.id)
+    await ctx.respond("Created a new public birthday list message in this channel.", ephemeral=True)
+
+@bot.slash_command(name="birthday_role_sync", description="Give the birthday member role to everyone who has shared their birthday")
+async def birthday_role_sync(ctx):
+    if not (ctx.author.guild_permissions.administrator or ctx.guild.owner_id == ctx.author.id):
+        return await ctx.respond("Admin only.", ephemeral=True)
+    if BIRTHDAY_MEMBER_ROLE_ID == 0:
+        return await ctx.respond("Birthday member role ID is not configured.", ephemeral=True)
+    role = ctx.guild.get_role(BIRTHDAY_MEMBER_ROLE_ID)
+    if not role:
+        return await ctx.respond("Birthday member role not found.", ephemeral=True)
+    bdays = await get_guild_birthdays(ctx.guild.id)
+    count = 0
+    for user_id in bdays.keys():
+        member = ctx.guild.get_member(int(user_id))
+        if member and role not in member.roles:
+            try:
+                await member.add_roles(role, reason="Shared birthday")
+                count += 1
+            except:
+                pass
+    await ctx.respond(f"Synced birthday member role to {count} member(s).", ephemeral=True)
+
 @bot.slash_command(name="pick", description="Pick a movie to add to the pool")
 async def pick(ctx, title: discord.Option(str, autocomplete=movie_autocomplete)):
     if not movie_titles:
@@ -502,17 +733,55 @@ async def pick(ctx, title: discord.Option(str, autocomplete=movie_autocomplete))
     canon = next((t for t in movie_titles if t.lower() == title.strip().lower()), None)
     if not canon:
         return await ctx.respond("That movie isn't in the library.", ephemeral=True)
-    pool = request_pool.setdefault(ctx.guild.id, [])
-    pool.append((ctx.author.id, canon))
-    await ctx.respond(f"Added **{canon}** • Pool size: `{len(pool)}`", ephemeral=True)
 
-@bot.slash_command(name="pool", description="See what movies have been added to todays pool")
-async def pool(ctx):
+    pool = request_pool.setdefault(ctx.guild.id, [])
+    user_indices = [i for i, (uid, _) in enumerate(pool) if uid == ctx.author.id]
+
+    if len(user_indices) >= MAX_POOL_ENTRIES_PER_USER:
+        return await ctx.respond(
+            f"You already have `{MAX_POOL_ENTRIES_PER_USER}` pick(s) in the pool. Use `/pick_replace` to swap one of your picks.",
+            ephemeral=True,
+        )
+
+    pool.append((ctx.author.id, canon))
+    await save_request_pool()
+    await update_pool_public_message(ctx.guild)
+    return await ctx.respond(
+        f"Added **{canon}** • You now have `{len(user_indices) + 1}` pick(s) in the pool.",
+        ephemeral=True,
+    )
+
+@bot.slash_command(name="pick_replace", description="Replace one of your picks in the pool")
+async def pick_replace(
+    ctx,
+    old_title: discord.Option(str, autocomplete=my_pool_movie_autocomplete),
+    new_title: discord.Option(str, autocomplete=movie_autocomplete),
+):
+    if not movie_titles:
+        return await ctx.respond("Movie list not loaded.", ephemeral=True)
+    canon_new = next((t for t in movie_titles if t.lower() == new_title.strip().lower()), None)
+    if not canon_new:
+        return await ctx.respond("That movie isn't in the library.", ephemeral=True)
+
     pool = request_pool.get(ctx.guild.id, [])
     if not pool:
         return await ctx.respond("Pool is empty.", ephemeral=True)
-    lines = [f"• **{t}** — {ctx.guild.get_member(u).mention if ctx.guild.get_member(u) else '<@'+str(u)+'>'}" for u, t in pool]
-    await ctx.respond(embed=discord.Embed(title="Current Pool", description="\n".join(lines), color=0x2e2f33), ephemeral=True)
+
+    indices = [i for i, (uid, title) in enumerate(pool) if uid == ctx.author.id and title == old_title]
+    if not indices:
+        return await ctx.respond("That pick is not in the pool as yours.", ephemeral=True)
+
+    idx = indices[0]
+    pool[idx] = (ctx.author.id, canon_new)
+    request_pool[ctx.guild.id] = pool
+    await save_request_pool()
+    await update_pool_public_message(ctx.guild)
+    await ctx.respond(f"Replaced **{old_title}** with **{canon_new}** in the pool.", ephemeral=True)
+
+@bot.slash_command(name="pool", description="See what movies have been added to todays pool")
+async def pool(ctx):
+    embed = await build_pool_embed(ctx.guild)
+    await ctx.respond(embed=embed, ephemeral=True)
 
 @bot.slash_command(name="random", description="The bot will choose a random movie from the pool")
 async def random_pick(ctx):
@@ -521,6 +790,8 @@ async def random_pick(ctx):
         return await ctx.respond("Pool is empty.", ephemeral=True)
     user_id, title = pyrandom.choice(pool)
     request_pool[ctx.guild.id] = []
+    await save_request_pool()
+    await update_pool_public_message(ctx.guild)
     member = ctx.guild.get_member(user_id)
     await ctx.respond(f"Random Pick: **{title}**\nRequested by {member.mention if member else '<@'+str(user_id)+'>'}")
 
@@ -601,6 +872,27 @@ async def qotd_now(ctx):
         traceback.print_exc()
         return await ctx.followup.send(f"QOTD error: `{type(e).__name__}` – `{repr(e)}`", ephemeral=True)
     await ctx.followup.send("QOTD posted!", ephemeral=True)
+
+@bot.slash_command(name="pool_public", description="Create or update the public pool message")
+async def pool_public(ctx):
+    if not (ctx.author.guild_permissions.administrator or ctx.guild.owner_id == ctx.author.id):
+        return await ctx.respond("Admin only.", ephemeral=True)
+    embed = await build_pool_embed(ctx.guild)
+    loc = pool_message_locations.get(ctx.guild.id)
+    if loc:
+        ch_id, msg_id = loc
+        channel = ctx.guild.get_channel(ch_id)
+        if channel:
+            try:
+                msg = await channel.fetch_message(msg_id)
+                await msg.edit(embed=embed)
+                return await ctx.respond("Updated the existing public pool message.", ephemeral=True)
+            except:
+                pass
+    msg = await ctx.channel.send(embed=embed)
+    pool_message_locations[ctx.guild.id] = (ctx.channel.id, msg.id)
+    await save_request_pool()
+    await ctx.respond("Created a new public pool message in this channel.", ephemeral=True)
 
 
 ############### ON_READY & BOT START ###############
