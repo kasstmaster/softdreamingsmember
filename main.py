@@ -944,13 +944,13 @@ async def random_pick(ctx):
         return await ctx.followup.send("Error: Announcement channel not found.", ephemeral=True)
     msg = await target_channel.send(announcement)
     rating_emojis = [
-        "U+1F60A",  # blushing smile
-        "U+1F60F",  # smirking face
-        "U+1F610",  # neutral
+        "U+1F60A",  # smiling face with smiling eyes
+        "U+1F642",  # slight smile
+        "U+1F615",  # face with diagonal mouth / confused
         "U+1F611",  # expressionless
         "U+1F612",  # unamused
         "U+1F61E",  # disappointed
-        "U+1F922",  # vomiting face
+        "U+1F922",  # nauseated / vomiting face
     ]
     for unicode in rating_emojis:
         await msg.add_reaction(unicode)
