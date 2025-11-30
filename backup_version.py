@@ -60,10 +60,12 @@ if GOOGLE_CREDS_RAW and SHEET_ID:
 else:
     print("QOTD disabled: missing GOOGLE_CREDENTIALS or GOOGLE_SHEET_ID")
 
+ENABLE_TV_IN_PICK = False
 BIRTHDAY_ROLE_ID = _env_int("BIRTHDAY_ROLE_ID", 1217937235840598026)
 BIRTHDAY_STORAGE_CHANNEL_ID = _env_int("BIRTHDAY_STORAGE_CHANNEL_ID", 1440912334813134868)
 BIRTHDAY_LIST_CHANNEL_ID = 1440989357535395911
 BIRTHDAY_LIST_MESSAGE_ID = 1440989655515271248
+MOVIE_NIGHT_ANNOUNCEMENT_CHANNEL_ID = 1444541741465342063
 MOVIE_STORAGE_CHANNEL_ID = _env_int("MOVIE_STORAGE_CHANNEL_ID", 0)
 TV_STORAGE_CHANNEL_ID = _env_int("TV_STORAGE_CHANNEL_ID", 0)
 DEAD_CHAT_ROLE_ID = _env_int("DEAD_CHAT_ROLE_ID", 0)
@@ -297,17 +299,20 @@ async def get_guild_birthdays(guild_id: int):
 
 async def build_birthday_embed(guild: discord.Guild) -> discord.Embed:
     birthdays = await get_guild_birthdays(guild.id)
-    embed = discord.Embed(title="Our Birthdays!", color=0x2e2f33)
-    if not birthdays:
-        embed.description = "No birthdays set yet."
-        return embed
     lines = []
     for user_id, mm_dd in sorted(birthdays.items(), key=lambda x: x[1]):
         member = guild.get_member(int(user_id))
-        name = member.display_name if member else "Unknown User"
-        lines.append(f"`{mm_dd}` — **{name}**")
-    embed.description = "\n".join(lines)
-    return embed
+        if member:
+            lines.append(f"{member.mention} — `{mm_dd}`")
+        else:
+            lines.append(f"<@{user_id}> — `{mm_dd}`")
+    description = "\n".join(lines) if lines else "No birthdays yet!"
+    description += "\n\n**SHARE YOUR BIRTHDAY**\n• </set:1440919374310408234> - Add your birthday to the server’s shared birthday list."
+    return discord.Embed(
+        title="OUR BIRTHDAYS!",
+        description=description,
+        color=0x2e2f33
+    ).set_footer(text="Messages in this channel are deleted after 5 minutes")
 
 async def get_birthday_public_location(guild_id: int):
     data = await _load_storage_message()
@@ -352,14 +357,24 @@ async def update_birthday_list_message(guild: discord.Guild):
 
 async def build_pool_embed(guild: discord.Guild) -> discord.Embed:
     pool = request_pool.get(guild.id, [])
-    if not pool:
-        return discord.Embed(title="Todays Movie Pool", description="Pool is empty.", color=0x2e2f33)
-    lines = []
-    for user_id, title in pool:
-        member = guild.get_member(user_id)
-        mention = member.mention if member else "<@"+str(user_id)+">"
-        lines.append(f"• **{title}** — {mention}")
-    return discord.Embed(title="Todays Movie Pool", description="\n".join(lines), color=0x2e2f33)
+    sorted_pool = sorted(
+        pool,
+        key=lambda e: (guild.get_member(e[0]) or discord.Object(e[0])).display_name.lower()
+    )
+    lines = [
+        f"{guild.get_member(u) and guild.get_member(u).mention or f'<@{u}>'} — **{t}**"
+        for u, t in sorted_pool
+    ]
+    description = "\n".join(lines) if lines else "Pool is empty — be the first to add a movie!"
+    description += "\n\n**ADD UP TO 3 MOVIES TO THE POOL**\n"
+    description += "• </pick:1444584815029522643> - Browse and pick from the dropdown menu\n"
+    description += "• </search:1444418642103107675> - If you already know what to pick\n"
+    description += "• </replace:1444418642103107676> - Replace one of your picks in the pool"
+    return discord.Embed(
+        title=movie_night_time(),
+        description=description,
+        color=0x2e2f33
+    ).set_footer(text="Messages in this channel are deleted after 5 minutes")
 
 async def update_pool_public_message(guild: discord.Guild):
     loc = pool_message_locations.get(guild.id)
@@ -429,7 +444,7 @@ async def post_daily_qotd():
 def find_role_by_name(guild: discord.Guild, name: str) -> discord.Role | None:
     name_lower = name.lower()
     for role in guild.roles:
-        cleaned = role.name.replace("Christmas tree", "").replace("Jack O Lantern", "").replace("Snowflake", "").strip()
+        cleaned = role.name.replace("🎄", "").replace("🎃", "").replace("❄️", "").strip()
         if cleaned.lower() == name_lower:
             return role
     return None
@@ -482,6 +497,15 @@ async def apply_icon_to_bot_and_server(guild: discord.Guild, url: str):
     except:
         pass
 
+from datetime import datetime, time, timezone
+
+def movie_night_time() -> str:
+    now = datetime.now(timezone.utc)
+    tonight = datetime.combine(now.date(), time(18, 0), tzinfo=timezone.utc)
+    if now >= tonight:
+        tonight = tonight.replace(day=tonight.day + 1)  # tomorrow
+    return f"MOVIE NIGHTS START AT <t:1764468000:t>"
+
 
 ############### VIEWS / UI COMPONENTS ###############
 class MediaPagerView(discord.ui.View):
@@ -489,36 +513,115 @@ class MediaPagerView(discord.ui.View):
         super().__init__(timeout=120)
         self.category = category
         self.page = page
+        self.dropdown = discord.ui.Select(
+            placeholder="✅ Select One",
+            min_values=1,
+            max_values=1,
+            options=[]
+        )
+        self.dropdown.callback = self.on_select
+        self.add_item(self.dropdown)
 
     def _items(self):
         return movie_titles if self.category == "movies" else tv_titles
 
+    def _page_size(self):
+        return min(PAGE_SIZE, 25)
+
     def _max_page(self):
-        return max(0, (len(self._items()) - 1) // PAGE_SIZE)
+        items = self._items()
+        if not items:
+            return 0
+        size = self._page_size()
+        return max(0, (len(items) - 1) // size)
+
+    def _page_slice(self):
+        items = self._items()
+        size = self._page_size()
+        max_page = self._max_page()
+        self.page = max(0, min(self.page, max_page))
+        start = self.page * size
+        end = start + size
+        return items[start:end], start
 
     def _build_content(self):
         items = self._items()
         if not items:
             return "No items."
         max_page = self._max_page()
-        self.page = max(0, min(self.page, max_page))
-        start = self.page * PAGE_SIZE
-        slice_items = items[start:start + PAGE_SIZE]
-        lines = [f"{i+1}. {t}" for i, t in enumerate(slice_items, start+1)]
-        header = f"{self.category.capitalize()} • Page {self.page+1}/{max_page+1} ({len(items)} total)"
+        page_items, _ = self._page_slice()
+        lines = [f"{i}. {t}" for i, t in enumerate(page_items, 1)]
+        display_cat = "TV Shows" if self.category == "shows" else "Movies"
+        header = f"{display_cat} • Page {self.page+1}/{max_page+1} ({len(items)} total)"
         return f"{header}\n```text\n" + "\n".join(lines if lines else ["Empty"]) + "\n```"
 
+    def _refresh_dropdown(self):
+        page_items, start = self._page_slice()
+        options = []
+        for i, title in enumerate(page_items):
+            index = start + i
+            label = f"{i+1}. {title}"
+            if len(label) > 100:
+                label = label[:97] + "..."
+            options.append(discord.SelectOption(label=label, value=str(index)))
+        if not options:
+            options.append(discord.SelectOption(label="No items on this page", value="none", default=True))
+        self.dropdown.options = options
+
     async def send_initial(self, ctx):
+        self._refresh_dropdown()
         await ctx.respond(self._build_content(), view=self, ephemeral=True)
+
+    async def on_select(self, interaction: discord.Interaction):
+        if not self.dropdown.values:
+            return await interaction.response.send_message("No selection.", ephemeral=True)
+        value = self.dropdown.values[0]
+        if value == "none":
+            return await interaction.response.send_message("Nothing to add from this page.", ephemeral=True)
+        try:
+            index = int(value)
+        except ValueError:
+            return await interaction.response.send_message("Invalid selection.", ephemeral=True)
+        items = self._items()
+        if index < 0 or index >= len(items):
+            return await interaction.response.send_message("That item no longer exists.", ephemeral=True)
+        title = items[index]
+        if self.category != "movies":
+            return await interaction.response.send_message("Only movies can be added to the pool.", ephemeral=True)
+        canon = next((t for t in movie_titles if t.lower() == title.strip().lower()), None)
+        if not canon:
+            return await interaction.response.send_message("That movie is no longer in the library.", ephemeral=True)
+        guild = interaction.guild
+        user = interaction.user
+        if guild is None:
+            return await interaction.response.send_message("This can only be used in a server.", ephemeral=True)
+        pool = request_pool.setdefault(guild.id, [])
+        if any(t.lower() == canon.lower() for _, t in pool):
+            return await interaction.response.send_message("**This movie is already in today’s pool!** Only one copy allowed.", ephemeral=True)
+        user_count = sum(1 for uid, _ in pool if uid == user.id)
+        if user_count >= MAX_POOL_ENTRIES_PER_USER:
+            return await interaction.response.send_message(
+                f"You already have `{MAX_POOL_ENTRIES_PER_USER}` pick(s) in the pool. Use </replace:1444418642103107676> to swap one.",
+                ephemeral=True,
+            )
+        pool.append((user.id, canon))
+        await save_request_pool()
+        await update_pool_public_message(guild)
+        await interaction.response.send_message(
+            f"Added **{canon}** • You now have `{user_count + 1}` pick(s) in the pool.",
+            ephemeral=True,
+        )
 
     @discord.ui.button(label="Prev", style=discord.ButtonStyle.secondary)
     async def prev(self, button, interaction):
         self.page -= 1
+        self._refresh_dropdown()
         await interaction.response.edit_message(content=self._build_content(), view=self)
 
     @discord.ui.button(label="Next", style=discord.ButtonStyle.secondary)
     async def next(self, button, interaction):
         self.page += 1
+        self._refresh_dropdown()
         await interaction.response.edit_message(content=self._build_content(), view=self)
 
 
@@ -621,6 +724,20 @@ async def on_member_join(member):
     except:
         pass
 
+@bot.event
+async def on_voice_state_update(member, before, after):
+    vc_id = 1331501272804884490
+    role = member.guild.get_role(1444555985728442390)
+    if not role:
+        return
+
+    if after.channel and after.channel.id == vc_id:
+        if role not in member.roles:
+            await member.add_roles(role, reason="Joined VC")
+    elif before.channel and before.channel.id == vc_id:
+        if role in member.roles:
+            await member.remove_roles(role, reason="Left VC")
+
 
 ############### COMMAND GROUPS ###############
 @bot.slash_command(name="commands", description="Admin / Announcer commands")
@@ -633,6 +750,28 @@ async def commands(ctx):
     embed.add_field(name="Holidays", value="• </holiday_add:1442616885802832115>\n• </holiday_remove:1442616885802832116>", inline=False)
     embed.set_footer(text="Also: /say • /media_add")
     await ctx.respond(embed=embed, ephemeral=True)
+
+@bot.slash_command(name="editbotmsg", description="Edit a bot message in this channel with 4 lines")
+async def editbotmsg(ctx, message_id: str, line1: str, line2: str, line3: str, line4: str):
+    if not (ctx.author.guild_permissions.administrator or ctx.guild.owner_id == ctx.author.id):
+        return await ctx.respond("Admin only.", ephemeral=True)
+    try:
+        msg_id_int = int(message_id)
+    except ValueError:
+        return await ctx.respond("Invalid message ID.", ephemeral=True)
+    try:
+        msg = await ctx.channel.fetch_message(msg_id_int)
+    except discord.NotFound:
+        return await ctx.respond("Message not found in this channel.", ephemeral=True)
+    except discord.Forbidden:
+        return await ctx.respond("I cannot access that message.", ephemeral=True)
+    except discord.HTTPException:
+        return await ctx.respond("Error fetching that message.", ephemeral=True)
+    if msg.author.id != bot.user.id:
+        return await ctx.respond("That message was not sent by me.", ephemeral=True)
+    new_content = "\n".join([line1, line2, line3, line4])
+    await msg.edit(content=new_content)
+    await ctx.respond("Message updated.", ephemeral=True)
 
 @bot.slash_command(name="set", description="Share your birthday with the server")
 async def set_birthday_self(ctx, month: discord.Option(str, choices=MONTH_CHOICES), day: int):
@@ -726,32 +865,78 @@ async def birthday_role_sync(ctx):
                 pass
     await ctx.respond(f"Synced birthday member role to {count} member(s).", ephemeral=True)
 
-@bot.slash_command(name="pick", description="Pick a movie to add to the pool")
+@bot.slash_command(name="pool_remove", description="Admin: Remove a pick from today's movie pool")
+async def pool_remove(
+    ctx,
+    user: discord.Option(discord.Member, "User whose pick to remove", required=False),
+    title: discord.Option(str, "Exact title to remove (case-insensitive)", required=False, autocomplete=movie_autocomplete),
+):
+    if not (ctx.author.guild_permissions.administrator or ctx.guild.owner_id == ctx.author.id):
+        return await ctx.respond("Admin only.", ephemeral=True)
+    pool = request_pool.get(ctx.guild.id, [])
+    if not pool:
+        return await ctx.respond("Pool is empty.", ephemeral=True)
+    if not user and not title:
+        return await ctx.respond("Specify either a user or a title.", ephemeral=True)
+    removed = []
+    new_pool = []
+    target_title = title.strip().lower() if title else None
+    target_uid = user.id if user else None
+    for uid, t in pool:
+        keep = True
+        if target_uid and uid == target_uid:
+            if not target_title or t.lower() == target_title:
+                member = ctx.guild.get_member(uid)
+                mention = member.mention if member else f"<@{uid}>"
+                removed.append(f"{mention} — **{t}**")
+                keep = False
+        elif target_title and t.lower() == target_title:
+            member = ctx.guild.get_member(uid)
+            mention = member.mention if member else f"<@{uid}>"
+            removed.append(f"{mention} — **{t}**")
+            keep = False
+        if keep:
+            new_pool.append((uid, t))
+    if not removed:
+        return await ctx.respond("No matching pick found.", ephemeral=True)
+    request_pool[ctx.guild.id] = new_pool
+    await save_request_pool()
+    await update_pool_public_message(ctx.guild)
+    await ctx.respond(f"Removed:\n" + "\n".join(removed), ephemeral=True)
+
+if ENABLE_TV_IN_PICK:
+    @bot.slash_command(name="pick", description="Browse the movie or TV collection and add picks to today's pool")
+    async def pick_browser(ctx, category: discord.Option(str, choices=["movies", "shows"], default="movies")):
+        view = MediaPagerView(category)
+        await view.send_initial(ctx)
+else:
+    @bot.slash_command(name="pick", description="Browse the movie collection and add picks to today's pool")
+    async def pick_browser(ctx):
+        view = MediaPagerView("movies")
+        await view.send_initial(ctx)
+
+@bot.slash_command(name="search", description="Search the movie list and add your pick")
 async def pick(ctx, title: discord.Option(str, autocomplete=movie_autocomplete)):
     if not movie_titles:
         return await ctx.respond("Movie list not loaded.", ephemeral=True)
     canon = next((t for t in movie_titles if t.lower() == title.strip().lower()), None)
     if not canon:
         return await ctx.respond("That movie isn't in the library.", ephemeral=True)
-
     pool = request_pool.setdefault(ctx.guild.id, [])
-    user_indices = [i for i, (uid, _) in enumerate(pool) if uid == ctx.author.id]
-
-    if len(user_indices) >= MAX_POOL_ENTRIES_PER_USER:
+    if any(t.lower() == canon.lower() for _, t in pool):
+        return await ctx.respond("**This movie is already in today’s pool!** Only one copy allowed.", ephemeral=True)
+    user_count = sum(1 for uid, _ in pool if uid == ctx.author.id)
+    if user_count >= MAX_POOL_ENTRIES_PER_USER:
         return await ctx.respond(
-            f"You already have `{MAX_POOL_ENTRIES_PER_USER}` pick(s) in the pool. Use `/pick_replace` to swap one of your picks.",
+            f"You already have `{MAX_POOL_ENTRIES_PER_USER}` pick(s) in the pool. Use `/replace` to swap one.",
             ephemeral=True,
         )
-
     pool.append((ctx.author.id, canon))
     await save_request_pool()
     await update_pool_public_message(ctx.guild)
-    return await ctx.respond(
-        f"Added **{canon}** • You now have `{len(user_indices) + 1}` pick(s) in the pool.",
-        ephemeral=True,
-    )
+    await ctx.respond(f"Added **{canon}** • You now have `{user_count + 1}` pick(s) in the pool.", ephemeral=True)
 
-@bot.slash_command(name="pick_replace", description="Replace one of your picks in the pool")
+@bot.slash_command(name="replace", description="Replace one of your existing picks in the pool")
 async def pick_replace(
     ctx,
     old_title: discord.Option(str, autocomplete=my_pool_movie_autocomplete),
@@ -762,15 +947,12 @@ async def pick_replace(
     canon_new = next((t for t in movie_titles if t.lower() == new_title.strip().lower()), None)
     if not canon_new:
         return await ctx.respond("That movie isn't in the library.", ephemeral=True)
-
     pool = request_pool.get(ctx.guild.id, [])
     if not pool:
         return await ctx.respond("Pool is empty.", ephemeral=True)
-
     indices = [i for i, (uid, title) in enumerate(pool) if uid == ctx.author.id and title == old_title]
     if not indices:
         return await ctx.respond("That pick is not in the pool as yours.", ephemeral=True)
-
     idx = indices[0]
     pool[idx] = (ctx.author.id, canon_new)
     request_pool[ctx.guild.id] = pool
@@ -783,25 +965,58 @@ async def pool(ctx):
     embed = await build_pool_embed(ctx.guild)
     await ctx.respond(embed=embed, ephemeral=True)
 
-@bot.slash_command(name="random", description="The bot will choose a random movie from the pool")
+@bot.slash_command(name="random", description="Pick tonight's winner — unpicked movies roll over to tomorrow!")
 async def random_pick(ctx):
+    await ctx.defer(ephemeral=True)
     pool = request_pool.get(ctx.guild.id, [])
     if not pool:
-        return await ctx.respond("Pool is empty.", ephemeral=True)
-    user_id, title = pyrandom.choice(pool)
-    request_pool[ctx.guild.id] = []
+        return await ctx.followup.send("Pool is empty.", ephemeral=True)
+    winner_idx = pyrandom.randrange(len(pool))
+    winner_id, winner_title = pool[winner_idx]
+    request_pool[ctx.guild.id] = [e for i, e in enumerate(pool) if i != winner_idx]
     await save_request_pool()
     await update_pool_public_message(ctx.guild)
-    member = ctx.guild.get_member(user_id)
-    await ctx.respond(f"Random Pick: **{title}**\nRequested by {member.mention if member else '<@'+str(user_id)+'>'}")
+    mention = ctx.guild.get_member(winner_id).mention if ctx.guild.get_member(winner_id) else f"<@{winner_id}>"
+    rollover = len(request_pool[ctx.guild.id])
+    rollover_text = f"\n\n{rollover} movie{'s' if rollover != 1 else ''} rolled over to the next pool" if rollover else ""
+    announcement = (
+        f"Pool Winner: **{winner_title}**\n"
+        f"{mention}'s pick!\n\n"
+        f"**Rate the movie**"
+    )
+    channel = ctx.guild.get_channel(MOVIE_NIGHT_ANNOUNCEMENT_CHANNEL_ID)
+    if not channel:
+        return await ctx.followup.send("Announcement channel missing.", ephemeral=True)
+    msg = await channel.send(announcement)
+    for emoji in ["😍", "😃", "🙂", "🫤", "😒", "🤢"]:
+        await msg.add_reaction(emoji)
+    await ctx.followup.send("Winner announced + perfect rating bar!", ephemeral=True)
 
-@bot.slash_command(name="list", description="View the list of movies & shows")
-async def list_media(ctx, category: discord.Option(str, choices=["movies", "shows"])):
-    items = movie_titles if category == "movies" else tv_titles
-    if not items:
-        return await ctx.respond(f"No {category} loaded.", ephemeral=True)
-    view = MediaPagerView(category)
-    await view.send_initial(ctx)
+@bot.slash_command(name="test_movie_announce", description="[TEST] Preview winner message + rating bar")
+async def test_movie_announce(
+    ctx,
+    title: discord.Option(str, "Movie title", default="Test Movie"),
+    user: discord.Option(discord.Member, "Who to tag as winner", required=False)
+):
+    if not (ctx.author.guild_permissions.administrator or ctx.guild.owner_id == ctx.author.id):
+        return await ctx.respond("Admin only.", ephemeral=True)
+    await ctx.defer(ephemeral=True)
+    winner = user or ctx.author
+    rollover = 5
+    rollover_text = f"\n\n{rollover} movie{'s' if rollover != 1 else ''} rolled over to the next pool" if rollover else ""
+    announcement = (
+        f"# Tonight's Movie Winner!\n"
+        f"**{winner_title}**\n"
+        f"{mention}'s pick!\n\n"
+        f"**Rate the movie:**"
+    )
+    channel = ctx.guild.get_channel(MOVIE_NIGHT_ANNOUNCEMENT_CHANNEL_ID)
+    if not channel:
+        return await ctx.followup.send("Channel ID wrong.", ephemeral=True)
+    msg = await channel.send(announcement)
+    for emoji in ["😍", "😃", "🙂", "🫤", "😒", "🤢"]:
+        await msg.add_reaction(emoji)
+    await ctx.followup.send(f"Test posted → {channel.mention}", ephemeral=True)
 
 @bot.slash_command(name="media_add")
 async def media_add(ctx, category: discord.Option(str, choices=["movies", "shows"]), title: str):
@@ -886,7 +1101,7 @@ async def pool_public(ctx):
             try:
                 msg = await channel.fetch_message(msg_id)
                 await msg.edit(embed=embed)
-                return await ctx.respond("Updated the existing public pool message.", ephemeral=True)
+                return await ctx.respond("Updated the public pool message.", ephemeral=True)
             except:
                 pass
     msg = await ctx.channel.send(embed=embed)
