@@ -882,6 +882,17 @@ async def pool_remove(
     await update_pool_public_message(ctx.guild)
     await ctx.respond(f"Removed:\n" + "\n".join(removed), ephemeral=True)
 
+if ENABLE_TV_IN_PICK:
+    @bot.slash_command(name="pick", description="Browse the movie or TV collection and add picks to today's pool")
+    async def pick_browser(ctx, category: discord.Option(str, choices=["movies", "shows"], default="movies")):
+        view = MediaPagerView(category)
+        await view.send_initial(ctx)
+else:
+    @bot.slash_command(name="pick", description="Browse the movie collection and add picks to today's pool")
+    async def pick_browser(ctx):
+        view = MediaPagerView("movies")
+        await view.send_initial(ctx)
+
 @bot.slash_command(name="search", description="Search the movie list and add your pick")
 async def pick(ctx, title: discord.Option(str, autocomplete=movie_autocomplete)):
     if not movie_titles:
