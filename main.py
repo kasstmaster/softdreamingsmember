@@ -949,7 +949,7 @@ async def random_pick(ctx):
 
     msg = await channel.send(announcement)
 
-    for emoji in [":grinning:", ":slight_smile:", ":confused:", ":expressionless:", ":unamused:", ":disappointed:", ":nauseated_face:"]:
+    for emoji in ["😍", "😃", "🙂", "🫤", "😑", "😒", "🤢"]:
         await msg.add_reaction(emoji)
 
     await ctx.followup.send("Winner announced + perfect rating bar!", ephemeral=True)
