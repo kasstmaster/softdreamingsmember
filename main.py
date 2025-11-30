@@ -982,7 +982,7 @@ async def test_movie_announce(
 
     msg = await channel.send(announcement)
 
-    for emoji in [":grinning:", ":slight_smile:", ":confused:", ":expressionless:", ":unamused:", ":disappointed:", ":nauseated_face:"]:
+    for emoji in ["😍", "😃", "🙂", "🫤", "😑", "😒", "🤢"]:
         await msg.add_reaction(emoji)
 
     await ctx.followup.send(f"Test posted → {channel.mention}", ephemeral=True)
