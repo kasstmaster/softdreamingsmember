@@ -920,38 +920,29 @@ async def pool(ctx):
 @bot.slash_command(name="random", description="Pick tonight's winner — unpicked movies roll over to tomorrow!")
 async def random_pick(ctx):
     await ctx.defer(ephemeral=True)
-
     pool = request_pool.get(ctx.guild.id, [])
     if not pool:
         return await ctx.followup.send("Pool is empty.", ephemeral=True)
-
     winner_idx = pyrandom.randrange(len(pool))
     winner_id, winner_title = pool[winner_idx]
     request_pool[ctx.guild.id] = [e for i, e in enumerate(pool) if i != winner_idx]
-
     await save_request_pool()
     await update_pool_public_message(ctx.guild)
-
     mention = ctx.guild.get_member(winner_id).mention if ctx.guild.get_member(winner_id) else f"<@{winner_id}>"
     rollover = len(request_pool[ctx.guild.id])
     rollover_text = f"\n\n{rollover} movie{'s' if rollover != 1 else ''} rolled over to the next pool" if rollover else ""
-
     announcement = (
         f"# Tonight's Movie Winner!\n"
         f"**{winner_title}**\n"
-        f"{mention}'s pick! {rollover_text}\n\n"
+        f"{mention}'s pick!\n\n"
         f"**Rate the movie:**"
     )
-
     channel = ctx.guild.get_channel(MOVIE_NIGHT_ANNOUNCEMENT_CHANNEL_ID)
     if not channel:
         return await ctx.followup.send("Announcement channel missing.", ephemeral=True)
-
     msg = await channel.send(announcement)
-
     for emoji in ["😍", "😃", "🙂", "🫤", "😒", "🤢"]:
         await msg.add_reaction(emoji)
-
     await ctx.followup.send("Winner announced + perfect rating bar!", ephemeral=True)
 
 @bot.slash_command(name="test_movie_announce", description="[TEST] Preview winner message + rating bar")
@@ -962,29 +953,22 @@ async def test_movie_announce(
 ):
     if not (ctx.author.guild_permissions.administrator or ctx.guild.owner_id == ctx.author.id):
         return await ctx.respond("Admin only.", ephemeral=True)
-
     await ctx.defer(ephemeral=True)
-
     winner = user or ctx.author
     rollover = 5
     rollover_text = f"\n\n{rollover} movie{'s' if rollover != 1 else ''} rolled over to the next pool" if rollover else ""
-
     announcement = (
         f"# Tonight's Movie Winner!\n"
-        f"**{title}**\n"
-        f"{winner.mention}'s pick! {rollover_text}\n\n"
+        f"**{winner_title}**\n"
+        f"{mention}'s pick!\n\n"
         f"**Rate the movie:**"
     )
-
     channel = ctx.guild.get_channel(MOVIE_NIGHT_ANNOUNCEMENT_CHANNEL_ID)
     if not channel:
         return await ctx.followup.send("Channel ID wrong.", ephemeral=True)
-
     msg = await channel.send(announcement)
-
     for emoji in ["😍", "😃", "🙂", "🫤", "😒", "🤢"]:
         await msg.add_reaction(emoji)
-
     await ctx.followup.send(f"Test posted → {channel.mention}", ephemeral=True)
 
 @bot.slash_command(name="media_add")
