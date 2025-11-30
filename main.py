@@ -925,71 +925,52 @@ async def random_pick(ctx):
         return await ctx.followup.send("Pool is empty.", ephemeral=True)
     winner_idx = pyrandom.randrange(len(pool))
     winner_id, winner_title = pool[winner_idx]
-    remaining_pool = [entry for i, entry in enumerate(pool) if i != winner_idx]
-    request_pool[ctx.guild.id] = remaining_pool
+    request_pool[ctx.guild.id] = [e for i, e in enumerate(pool) if i != winner_idx]
     await save_request_pool()
     await update_pool_public_message(ctx.guild)
-    member = ctx.guild.get_member(winner_id)
-    mention = member.mention if member else f"<@{winner_id}>"
-    rollover_count = len(remaining_pool)
-    rollover_text = f"\n\n{rollover_count} movie{'' if rollover_count == 1 else 's'} rolled over to the next pool" if rollover_count else ""
+    mention = ctx.guild.get_member(winner_id).mention if ctx.guild.get_member(winner_id) else f"<@{winner_id}>"
+    rollover = len(request_pool[ctx.guild.id])
+    rollover_text = f"\n\n{rollover} movie{'s' if rollover != 1 else ''} rolled over to the next pool" if rollover else ""
     announcement = (
         f"# Tonight's Movie Winner!\n"
-        f"**{winner_title}**\n"
+        f"f"**{winner_title}**\n"
         f"{mention}'s pick! {rollover_text}\n\n"
         f"**Rate the movie:**"
     )
-    target_channel = ctx.guild.get_channel(MOVIE_NIGHT_ANNOUNCEMENT_CHANNEL_ID)
-    if target_channel is None:
-        return await ctx.followup.send("Error: Announcement channel not found.", ephemeral=True)
-    msg = await target_channel.send(announcement)
-    rating_emojis = [
-        "U+1F60A",  # smiling face with smiling eyes
-        "U+1F642",  # slight smile
-        "U+1F615",  # face with diagonal mouth / confused
-        "U+1F611",  # expressionless
-        "U+1F612",  # unamused
-        "U+1F61E",  # disappointed
-        "U+1F922",  # nauseated / vomiting face
-    ]
-    for unicode in rating_emojis:
-        await msg.add_reaction(unicode)
-    await ctx.followup.send("Movie picked and rating bar added!", ephemeral=True)
+    channel = ctx.guild.get_channel(MOVIE_NIGHT_ANNOUNCEMENT_CHANNEL_ID)
+    if not channel:
+        return await ctx.followup.send("Announcement channel missing.", ephemeral=True)
+    msg = await channel.send(announcement)
+    for emoji in ["grinning", "slight_smile", "face_with_diagonal_mouth", "expressionless", "unamused", "disappointed", "nauseated_face"]:
+        await msg.add_reaction(emoji)
+    await ctx.followup.send("Winner announced + rating bar added!", ephemeral=True)
 
-@bot.slash_command(name="test_movie_announce", description="[TEST ONLY] Preview the winner message + rating bar")
+@bot.slash_command(name="test_movie_announce", description="[TEST] Preview winner message + rating bar")
 async def test_movie_announce(
     ctx,
-    title: discord.Option(str, "Movie title to fake-announce", default="Test Movie 2025"),
-    user: discord.Option(discord.Member, "Who to pretend won", required=False)
+    title: discord.Option(str, "Movie title", default="Test Movie Night"),
+    user: discord.Option(discord.Member, "Who to tag as winner", required=False)
 ):
     if not (ctx.author.guild_permissions.administrator or ctx.guild.owner_id == ctx.author.id):
-        return await ctx.respond("Admin only test command.", ephemeral=True)
+        return await ctx.respond("Admin only.", ephemeral=True)
     await ctx.defer(ephemeral=True)
-    fake_member = user or ctx.author
-    rollover_count = 7
-    rollover_text = f"\n\n{rollover_count} movie{'' if rollover_count == 1 else 's'} rolled over to the next pool" if rollover_count else ""
+    winner = user or ctx.author
+    mention = winner.mention
+    rollover = 5
+    rollover_text = f"\n\n{rollover} movie{'s' if rollover != 1 else ''} rolled over to the next pool" if rollover else ""
     announcement = (
         f"# Tonight's Movie Winner!\n"
         f"**{title}**\n"
-        f"{fake_member.mention}'s pick! {rollover_text}\n\n"
+        f"{mention}'s pick! {rollover_text}\n\n"
         f"**Rate the movie:**"
     )
-    target_channel = ctx.guild.get_channel(MOVIE_NIGHT_ANNOUNCEMENT_CHANNEL_ID)
-    if not target_channel:
-        return await ctx.followup.send("Error: MOVIE_NIGHT_ANNOUNCEMENT_CHANNEL_ID is wrong or missing.", ephemeral=True)
-    msg = await target_channel.send(announcement)
-    rating_emojis = [
-        "\U0001F60A",  # blushing smile
-        "\U0001F60F",  # smirking face
-        "\U0001F610",  # neutral
-        "\U0001F611",  # expressionless
-        "\U0001F612",  # unamused
-        "\U0001F61E",  # disappointed
-        "\U0001F922",  # vomiting face
-    ]
-    for emoji in rating_emojis:
+    channel = ctx.guild.get_channel(MOVIE_NIGHT_ANNOUNCEMENT_CHANNEL_ID)
+    if not channel:
+        return await ctx.followup.send("Error: MOVIE_NIGHT_ANNOUNCEMENT_CHANNEL_ID is wrong.", ephemeral=True)
+    msg = await channel.send(announcement)
+    for emoji in ["grinning", "slight_smile", "face_with_diagonal_mouth", "expressionless", "unamused", "disappointed", "nauseated_face"]:
         await msg.add_reaction(emoji)
-    await ctx.followup.send(f"Test successful! Check {target_channel.mention}", ephemeral=True)
+    await ctx.followup.send(f"Test sent → {channel.mention}", ephemeral=True)
 
 @bot.slash_command(name="media_add")
 async def media_add(ctx, category: discord.Option(str, choices=["movies", "shows"]), title: str):
