@@ -917,7 +917,7 @@ async def pool(ctx):
     embed = await build_pool_embed(ctx.guild)
     await ctx.respond(embed=embed, ephemeral=True)
 
-@bot.slash_command(name="random", description="Pick tonight's winner — unpicked movies roll over to tomorrow!")
+@bot.slash_command(name="random", description="Pick tonight's winner — unpicks roll over to tomorrow!")
 async def random_pick(ctx):
     await ctx.defer(ephemeral=True)
     pool = request_pool.get(ctx.guild.id, [])
@@ -932,18 +932,28 @@ async def random_pick(ctx):
     member = ctx.guild.get_member(winner_id)
     mention = member.mention if member else f"<@{winner_id}>"
     rollover_count = len(remaining_pool)
+    rollover_text = f"\n\n{rollover_count} movie{'' if rollover_count == 1 else 's'} rolled over to the next pool" if rollover_count else ""
     announcement = (
         f"# Tonight's Movie Winner!\n"
         f"**{winner_title}**\n"
-        f"{mention}'s pick!\n\n"
-        f"*Rate it 1-5*\n"
+        f"{mention}'s pick! {rollover_text}"
     )
     target_channel = ctx.guild.get_channel(MOVIE_NIGHT_ANNOUNCEMENT_CHANNEL_ID)
     if target_channel is None:
-        await ctx.followup.send("Error: Announcement channel not found.", ephemeral=True)
-        return
-    await target_channel.send(announcement)
-    await ctx.followup.send("Random pick completed — winner announced in the movie night channel!", ephemeral=True)
+        return await ctx.followup.send("Error: Announcement channel not found (check MOVIE_NIGHT_ANNOUNCEMENT_CHANNEL_ID).", ephemeral=True)
+    msg = await target_channel.send(announcement)
+    rating_emojis = [
+        "U+1F60A",   # smiling face with smiling eyes
+        "U+1F60F",   # smirking face with rosy cheeks
+        "U+1F610",   # neutral face
+        "U+1F611",   # expressionless face
+        "U+1F612",   # unamused face
+        "U+1F61E",   # disappointed face
+        "U+1F922",   # nauseated face (puke)
+    ]
+    for emoji in rating_emojis:
+        await msg.add_reaction(emoji)
+    await ctx.followup.send("Winner announced + rating bar added!", ephemeral=True)
 
 @bot.slash_command(name="media_add")
 async def media_add(ctx, category: discord.Option(str, choices=["movies", "shows"]), title: str):
