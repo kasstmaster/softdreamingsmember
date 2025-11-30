@@ -65,6 +65,7 @@ BIRTHDAY_ROLE_ID = _env_int("BIRTHDAY_ROLE_ID", 1217937235840598026)
 BIRTHDAY_STORAGE_CHANNEL_ID = _env_int("BIRTHDAY_STORAGE_CHANNEL_ID", 1440912334813134868)
 BIRTHDAY_LIST_CHANNEL_ID = 1440989357535395911
 BIRTHDAY_LIST_MESSAGE_ID = 1440989655515271248
+MOVIE_NIGHT_ANNOUNCEMENT_CHANNEL_ID = 1444541741465342063
 MOVIE_STORAGE_CHANNEL_ID = _env_int("MOVIE_STORAGE_CHANNEL_ID", 0)
 TV_STORAGE_CHANNEL_ID = _env_int("TV_STORAGE_CHANNEL_ID", 0)
 DEAD_CHAT_ROLE_ID = _env_int("DEAD_CHAT_ROLE_ID", 0)
@@ -918,9 +919,10 @@ async def pool(ctx):
 
 @bot.slash_command(name="random", description="Pick tonight's winner — unpicked movies roll over to tomorrow!")
 async def random_pick(ctx):
+    await ctx.defer(ephemeral=True)
     pool = request_pool.get(ctx.guild.id, [])
     if not pool:
-        return await ctx.respond("Pool is empty.", ephemeral=True)
+        return await ctx.followup.send("Pool is empty.", ephemeral=True)
     winner_idx = pyrandom.randrange(len(pool))
     winner_id, winner_title = pool[winner_idx]
     remaining_pool = [entry for i, entry in enumerate(pool) if i != winner_idx]
@@ -931,20 +933,17 @@ async def random_pick(ctx):
     mention = member.mention if member else f"<@{winner_id}>"
     rollover_count = len(remaining_pool)
     rollover_text = f"\n\n{rollover_count} movie{'' if rollover_count == 1 else 's'} rolled over to the next pool" if rollover_count else ""
-    await ctx.respond(
-        f"Pool Winner: {winner_title}\n"
+    announcement = (
+        f"# Tonight's Movie Winner!\n"
+        f"**{winner_title}**\n"
         f"{mention}'s pick! {rollover_text}"
     )
-if ENABLE_TV_IN_PICK:
-    @bot.slash_command(name="pick", description="Browse the movie or TV collection and add picks to today's pool")
-    async def pick_browser(ctx, category: discord.Option(str, choices=["movies", "shows"], default="movies")):
-        view = MediaPagerView(category)
-        await view.send_initial(ctx)
-else:
-    @bot.slash_command(name="pick", description="Browse the movie collection and add picks to today's pool")
-    async def pick_browser(ctx):
-        view = MediaPagerView("movies")
-        await view.send_initial(ctx)
+    target_channel = ctx.guild.get_channel(MOVIE_NIGHT_ANNOUNCEMENT_CHANNEL_ID)
+    if target_channel is None:
+        await ctx.followup.send("Error: Announcement channel not found.", ephemeral=True)
+        return
+    await target_channel.send(announcement)
+    await ctx.followup.send("Random pick completed — winner announced in the movie night channel!", ephemeral=True)
 
 @bot.slash_command(name="media_add")
 async def media_add(ctx, category: discord.Option(str, choices=["movies", "shows"]), title: str):
