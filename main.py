@@ -59,7 +59,8 @@ if GOOGLE_CREDS_RAW and SHEET_ID:
         traceback.print_exc()
 else:
     print("QOTD disabled: missing GOOGLE_CREDENTIALS or GOOGLE_SHEET_ID")
-
+    
+ENABLE_TV_IN_PICK = False
 MOVIE_NIGHT_ANNOUNCEMENT_CHANNEL_ID = _env_int("MOVIE_NIGHT_ANNOUNCEMENT_CHANNEL_ID", 0)  # ・Movies
 SECOND_MOVIE_ANNOUNCEMENT_CHANNEL_ID = _env_int("SECOND_MOVIE_ANNOUNCEMENT_CHANNEL_ID", 0)  # ・Ratings
 MOVIE_STORAGE_CHANNEL_ID = _env_int("MOVIE_STORAGE_CHANNEL_ID", 0)  # For trailer messages linked to sheets
