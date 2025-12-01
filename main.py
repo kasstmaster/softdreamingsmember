@@ -60,36 +60,32 @@ if GOOGLE_CREDS_RAW and SHEET_ID:
 else:
     print("QOTD disabled: missing GOOGLE_CREDENTIALS or GOOGLE_SHEET_ID")
 
-ENABLE_TV_IN_PICK = False
-BIRTHDAY_ROLE_ID = _env_int("BIRTHDAY_ROLE_ID", 1217937235840598026)
-BIRTHDAY_STORAGE_CHANNEL_ID = _env_int("BIRTHDAY_STORAGE_CHANNEL_ID", 1440912334813134868)
-BIRTHDAY_LIST_CHANNEL_ID = 1440989357535395911
-BIRTHDAY_LIST_MESSAGE_ID = 1440989655515271248
-MOVIE_NIGHT_ANNOUNCEMENT_CHANNEL_ID = 1444944070039306262
-SECOND_MOVIE_ANNOUNCEMENT_CHANNEL_ID = _env_int("SECOND_MOVIE_ANNOUNCEMENT_CHANNEL_ID", 0) #ratings
-MOVIE_STORAGE_CHANNEL_ID = _env_int("MOVIE_STORAGE_CHANNEL_ID", 0)
-TV_STORAGE_CHANNEL_ID = _env_int("TV_STORAGE_CHANNEL_ID", 0)
-DEAD_CHAT_ROLE_ID = _env_int("DEAD_CHAT_ROLE_ID", 0)
-DEAD_CHAT_ROLE_NAME = os.getenv("DEAD_CHAT_ROLE_NAME", "Dead Chat")
+MOVIE_NIGHT_ANNOUNCEMENT_CHANNEL_ID = _env_int("MOVIE_NIGHT_ANNOUNCEMENT_CHANNEL_ID", 0)  # ・Movies
+SECOND_MOVIE_ANNOUNCEMENT_CHANNEL_ID = _env_int("SECOND_MOVIE_ANNOUNCEMENT_CHANNEL_ID", 0)  # ・Ratings
+MOVIE_STORAGE_CHANNEL_ID = _env_int("MOVIE_STORAGE_CHANNEL_ID", 0)  # For trailer messages linked to sheets
+MAX_POOL_ENTRIES_PER_USER = _env_int("MAX_POOL_ENTRIES_PER_USER", 3)
+PAGE_SIZE = 25
+
 QOTD_CHANNEL_ID = _env_int("QOTD_CHANNEL_ID", 0)
+
+DEFAULT_ICON_URL = os.getenv("DEFAULT_ICON_URL", "")
 CHRISTMAS_ICON_URL = os.getenv("CHRISTMAS_ICON_URL", "")
 HALLOWEEN_ICON_URL = os.getenv("HALLOWEEN_ICON_URL", "")
-DEFAULT_ICON_URL = os.getenv("DEFAULT_ICON_URL", "")
-MAX_POOL_ENTRIES_PER_USER = _env_int("MAX_POOL_ENTRIES_PER_USER", 3)
-BIRTHDAY_MEMBER_ROLE_ID = _env_int("BIRTHDAY_MEMBER_ROLE_ID", 0)
 CHRISTMAS_ROLES = {"Cranberry": "Admin", "lights": "Original Member", "Grinch": "Member", "Christmas": "Bots"}
 HALLOWEEN_ROLES = {"Cauldron": "Admin", "Candy": "Original Member", "Witchy": "Member", "Halloween": "Bots"}
-DEAD_CHAT_COLORS = [
-    discord.Color.red(), discord.Color.orange(), discord.Color.gold(),
-    discord.Color.green(), discord.Color.blue(), discord.Color.purple(),
-    discord.Color.magenta(), discord.Color.teal(),
-]
-MONTH_CHOICES = [
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December",
-]
+
+DEAD_CHAT_ROLE_ID = _env_int("DEAD_CHAT_ROLE_ID", 0)
+DEAD_CHAT_ROLE_NAME = os.getenv("DEAD_CHAT_ROLE_NAME", "Dead Chat")
+DEAD_CHAT_COLORS = [discord.Color.red(), discord.Color.orange(), discord.Color.gold(), discord.Color.green(), discord.Color.blue(), discord.Color.purple(), discord.Color.magenta(), discord.Color.teal()]
+
+BIRTHDAY_ROLE_ID = _env_int("BIRTHDAY_ROLE_ID", 0)  # The role given when it is their birthday
+BIRTHDAY_MEMBER_ROLE_ID = _env_int("BIRTHDAY_MEMBER_ROLE_ID", 0)  # The role given when they share their birthday
+BIRTHDAY_STORAGE_CHANNEL_ID = _env_int("BIRTHDAY_STORAGE_CHANNEL_ID", 0)
+BIRTHDAY_LIST_CHANNEL_ID = _env_int("BIRTHDAY_LIST_CHANNEL_ID", 0)
+BIRTHDAY_LIST_MESSAGE_ID = _env_int("BIRTHDAY_LIST_MESSAGE_ID", 0)
+MONTH_CHOICES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
 MONTH_TO_NUM = {name: f"{i:02d}" for i, name in enumerate(MONTH_CHOICES, start=1)}
-PAGE_SIZE = 25
+
 
 
 ############### GLOBAL STATE / STORAGE ###############
