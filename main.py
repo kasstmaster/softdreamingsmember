@@ -405,8 +405,7 @@ async def build_pool_embed(guild: discord.Guild) -> discord.Embed:
         member = guild.get_member(u)
         user_mention = member.mention if member else f"<@{u}>"
         new_lines.append(
-            f"{user_mention} — **{t}**\n"
-            f"[Poster]({poster}) • [Trailer]({trailer})"
+            f"{user_mention} — **{t}**"
         )
 
     lines = new_lines
