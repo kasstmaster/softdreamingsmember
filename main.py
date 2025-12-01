@@ -252,7 +252,7 @@ async def initialize_media_lists():
         return
     sh = gc.open_by_key(SHEET_ID)
     ws = sh.worksheet("Movies")
-    vals = ws.get_all_values()[1:]  # skip header
+    vals = ws.get_all_values()[1:]
     movies = []
     for row in vals:
         if not row:
@@ -260,11 +260,46 @@ async def initialize_media_lists():
         title = row[0].strip() if len(row) > 0 else ""
         if not title:
             continue
-        poster  = row[2].strip() if len(row) > 2 else ""
-        trailer = row[3].strip() if len(row) > 3 else ""
+        poster = row[1].strip() if len(row) > 1 else ""
+        trailer = row[2].strip() if len(row) > 2 else ""
         movies.append({"title": title, "poster": poster, "trailer": trailer})
     movie_titles = movies
     print(f"Loaded {len(movie_titles)} movies from sheet.")
+
+async def sync_movie_library_messages():
+    if MOVIE_STORAGE_CHANNEL_ID == 0:
+        return
+    channel = bot.get_channel(MOVIE_STORAGE_CHANNEL_ID)
+    if not channel:
+        return
+    existing = []
+    async for msg in channel.history(limit=None, oldest_first=True):
+        if msg.author == bot.user:
+            existing.append(msg)
+    rows = movie_titles
+    for idx, movie in enumerate(rows):
+        title = movie["title"]
+        trailer = movie.get("trailer") or ""
+        content = f"{title}\n{trailer}" if trailer else title
+        if idx < len(existing):
+            m = existing[idx]
+            try:
+                await m.edit(content=content, view=MovieEntryView())
+            except:
+                try:
+                    await channel.send(content=content, view=MovieEntryView())
+                except:
+                    pass
+        else:
+            try:
+                await channel.send(content=content, view=MovieEntryView())
+            except:
+                pass
+    for extra in existing[len(rows):]:
+        try:
+            await extra.delete()
+        except:
+            pass
 
 async def ensure_birthday_member_role(guild: discord.Guild, member: discord.Member):
     if BIRTHDAY_MEMBER_ROLE_ID == 0:
@@ -660,6 +695,46 @@ class MediaPagerView(discord.ui.View):
         self._refresh_dropdown()
         await interaction.response.edit_message(content=self._build_content(), view=self)
 
+class MovieEntryView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+    @discord.ui.button(label="Add to Pool", style=discord.ButtonStyle.primary, custom_id="movie_entry_add_to_pool")
+    async def add_to_pool(self, button, interaction: discord.Interaction):
+        message = interaction.message
+        if not message or not message.content:
+            return await interaction.response.send_message("I can't read this movie title.", ephemeral=True)
+        lines = message.content.splitlines()
+        if not lines:
+            return await interaction.response.send_message("I can't read this movie title.", ephemeral=True)
+        movie_title = lines[0].strip()
+        guild = interaction.guild
+        user = interaction.user
+        if guild is None:
+            return await interaction.response.send_message("This can only be used in a server.", ephemeral=True)
+        canon = next((m for m in movie_titles if m["title"].lower() == movie_title.lower()), None)
+        if not canon:
+            return await interaction.response.send_message("That movie is no longer in the library.", ephemeral=True)
+        movie_title = canon["title"]
+        pool = request_pool.setdefault(guild.id, [])
+        if any(t.lower() == movie_title.lower() for _, t in pool):
+            return await interaction.response.send_message(
+                "**This movie is already in today’s pool!** Only one copy allowed.",
+                ephemeral=True,
+            )
+        user_count = sum(1 for uid, _ in pool if uid == user.id)
+        if user_count >= MAX_POOL_ENTRIES_PER_USER:
+            return await interaction.response.send_message(
+                f"You already have `{MAX_POOL_ENTRIES_PER_USER}` pick(s) in the pool. Use </replace:1444418642103107676> to swap one.",
+                ephemeral=True,
+            )
+        pool.append((user.id, movie_title))
+        await save_request_pool()
+        await update_pool_public_message(guild)
+        await interaction.response.send_message(
+            f"Added **{movie_title}** • You now have `{user_count + 1}` pick(s) in the pool.",
+            ephemeral=True,
+        )
+
 
 ############### AUTOCOMPLETE FUNCTIONS ###############
 async def movie_autocomplete(ctx: discord.AutocompleteContext):
@@ -744,6 +819,7 @@ async def birthday_checker():
 @bot.event
 async def on_ready():
     print(f"{bot.user} online!")
+    bot.add_view(MovieEntryView())
     await initialize_storage_message()
     await initialize_media_lists()
     await load_request_pool()
@@ -907,6 +983,17 @@ async def media_reload(ctx):
     await ctx.defer(ephemeral=True)
     await initialize_media_lists()
     await ctx.followup.send("Reloaded movie list from Google Sheets.", ephemeral=True)
+
+@bot.slash_command(name="library_sync", description="Sync movie library messages with the Movies sheet")
+async def library_sync(ctx):
+    if not (ctx.author.guild_permissions.administrator or ctx.guild.owner_id == ctx.author.id):
+        return await ctx.respond("Admin only.", ephemeral=True)
+    if MOVIE_STORAGE_CHANNEL_ID == 0:
+        return await ctx.respond("MOVIE_STORAGE_CHANNEL_ID is not configured.", ephemeral=True)
+    await ctx.defer(ephemeral=True)
+    await initialize_media_lists()
+    await sync_movie_library_messages()
+    await ctx.followup.send("Library messages synced with Google Sheets.", ephemeral=True)
 
 @bot.slash_command(name="pool_remove", description="Admin: Remove a pick from today's movie pool")
 async def pool_remove(
