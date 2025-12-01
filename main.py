@@ -1129,8 +1129,7 @@ async def random_pick(ctx):
     second_channel = ctx.guild.get_channel(SECOND_MOVIE_ANNOUNCEMENT_CHANNEL_ID)
     if second_channel:
         second_text = (
-            f"**{winner_title}**\n"
-            f"-# RATE THIS MOVIE"
+            f"**{winner_title}**"
         )
         msg = await second_channel.send(second_text)
         for emoji in ["😍", "😃", "🙂", "🫤", "😒", "🤢"]:
@@ -1153,8 +1152,7 @@ async def test_movie_announce(
     announcement = (
         f"# Tonight's Movie Winner!\n"
         f"**{title}**\n"
-        f"{mention}'s pick!{rollover_text}\n\n"
-        f"-# RATE THIS MOVIE"
+        f"{mention}'s pick!{rollover_text}"
     )
     channel = ctx.guild.get_channel(MOVIE_NIGHT_ANNOUNCEMENT_CHANNEL_ID)
     if not channel:
