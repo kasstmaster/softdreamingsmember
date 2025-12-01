@@ -382,11 +382,13 @@ async def update_birthday_list_message(guild: discord.Guild):
 
 async def build_pool_embed(guild: discord.Guild) -> discord.Embed:
     pool = request_pool.get(guild.id, [])
-    sorted_pool = sorted(
-        pool,
-        key=lambda e: (guild.get_member(e[0]) or discord.Object(e[0])).display_name.lower()
-    )
-
+    def sort_key(entry):
+        uid, _ = entry
+        member = guild.get_member(uid)
+        if member:
+            return member.display_name.lower()
+        return f"zzz-{uid}"
+    sorted_pool = sorted(pool, key=sort_key)
     new_lines = []
     for u, t in sorted_pool:
         info = next((m for m in movie_titles if m["title"] == t), None)
@@ -397,14 +399,12 @@ async def build_pool_embed(guild: discord.Guild) -> discord.Embed:
         new_lines.append(
             f"{user_mention} — **{t}**"
         )
-
     lines = new_lines
     description = "\n".join(lines) if lines else "Pool is empty — be the first to add a movie!"
     description += "\n\n**ADD UP TO 3 MOVIES TO THE POOL**\n"
     description += "• </pick:1444584815029522643> - Browse and pick from the dropdown menu\n"
     description += "• </search:1444418642103107675> - If you already know what to pick\n"
     description += "• </replace:1444418642103107676> - Replace one of your picks in the pool"
-
     return discord.Embed(
         title=movie_night_time(),
         description=description,
