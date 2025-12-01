@@ -898,6 +898,14 @@ async def birthday_role_sync(ctx):
                 pass
     await ctx.respond(f"Synced birthday member role to {count} member(s).", ephemeral=True)
 
+@bot.slash_command(name="media_reload", description="Reload movie list from Google Sheets")
+async def media_reload(ctx):
+    if not (ctx.author.guild_permissions.administrator or ctx.guild.owner_id == ctx.author.id):
+        return await ctx.respond("Admin only.", ephemeral=True)
+    await ctx.defer(ephemeral=True)
+    await initialize_media_lists()
+    await ctx.followup.send("Reloaded movie list from Google Sheets.", ephemeral=True)
+
 @bot.slash_command(name="pool_remove", description="Admin: Remove a pick from today's movie pool")
 async def pool_remove(
     ctx,
