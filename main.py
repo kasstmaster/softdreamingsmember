@@ -533,6 +533,74 @@ async def apply_icon_to_bot_and_server(guild: discord.Guild, url: str):
     except:
         pass
 
+def _load_emoji_config_from_env(env_name: str) -> list[dict]:
+    raw = os.getenv(env_name, "[]")
+    try:
+        data = json.loads(raw)
+        if isinstance(data, list):
+            return data
+    except:
+        pass
+    return []
+
+def _collect_holiday_emoji_names() -> set[str]:
+    names: set[str] = set()
+    for env_name in ("CHRISTMAS_EMOJIS", "HALLOWEEN_EMOJIS"):
+        config = _load_emoji_config_from_env(env_name)
+        for item in config:
+            if not isinstance(item, dict):
+                continue
+            name = item.get("name")
+            if isinstance(name, str) and name:
+                names.add(name)
+    return names
+
+async def apply_holiday_emojis(guild: discord.Guild, holiday: str) -> int:
+    env_name = "CHRISTMAS_EMOJIS" if holiday == "christmas" else "HALLOWEEN_EMOJIS"
+    config = _load_emoji_config_from_env(env_name)
+    if not config:
+        return 0
+    created = 0
+    existing_names = {e.name for e in guild.emojis}
+    async with aiohttp.ClientSession() as session:
+        for item in config:
+            if not isinstance(item, dict):
+                continue
+            name = item.get("name")
+            url = item.get("url")
+            if not isinstance(name, str) or not isinstance(url, str):
+                continue
+            if not name or not url:
+                continue
+            if name in existing_names:
+                continue
+            try:
+                async with session.get(url) as resp:
+                    if resp.status != 200:
+                        continue
+                    data = await resp.read()
+                emoji = await guild.create_custom_emoji(name=name, image=data, reason=f"{holiday} emoji")
+                existing_names.add(emoji.name)
+                created += 1
+            except:
+                continue
+    return created
+
+async def clear_holiday_emojis(guild: discord.Guild) -> int:
+    names = _collect_holiday_emoji_names()
+    if not names:
+        return 0
+    removed = 0
+    for emoji in list(guild.emojis):
+        if emoji.name not in names:
+            continue
+        try:
+            await emoji.delete(reason="Holiday emoji cleanup")
+            removed += 1
+        except:
+            continue
+    return removed
+
 def movie_night_time() -> str:
     return "MOVIE NIGHTS START AT 6PM PACIFIC PST"
 
@@ -771,9 +839,16 @@ async def holiday_scheduler():
                 if "10-01" <= today <= "10-31":
                     await clear_holiday_theme(guild)
                     await apply_holiday_theme(guild, "halloween")
+                    await clear_holiday_emojis(guild)
+                    await apply_holiday_emojis(guild, "halloween")
                 elif "12-01" <= today <= "12-26":
                     await clear_holiday_theme(guild)
                     await apply_holiday_theme(guild, "christmas")
+                    await clear_holiday_emojis(guild)
+                    await apply_holiday_emojis(guild, "christmas")
+                else:
+                    await clear_holiday_theme(guild)
+                    await clear_holiday_emojis(guild)
             await asyncio.sleep(61)
         await asyncio.sleep(30)
 
@@ -1165,7 +1240,8 @@ async def holiday_add(ctx, holiday: discord.Option(str, choices=["christmas", "h
         return await ctx.respond("Admin only.", ephemeral=True)
     await ctx.defer(ephemeral=True)
     added = await apply_holiday_theme(ctx.guild, holiday)
-    await ctx.followup.send(f"Applied **{holiday.capitalize()}** theme to **{added}** members! {'Christmas tree' if holiday == 'christmas' else 'Jack O Lantern'}", ephemeral=True)
+    emoji_created = await apply_holiday_emojis(ctx.guild, holiday)
+    await ctx.followup.send(f"Applied {holiday.capitalize()} theme to {added} member(s) and created {emoji_created} emoji(s).", ephemeral=True)
 
 @bot.slash_command(name="holiday_remove", description="Remove the holiday theme from the server")
 async def holiday_remove(ctx):
@@ -1173,7 +1249,8 @@ async def holiday_remove(ctx):
         return await ctx.respond("Admin only.", ephemeral=True)
     await ctx.defer(ephemeral=True)
     removed = await clear_holiday_theme(ctx.guild)
-    await ctx.followup.send(f"Removed all holiday roles from **{removed}** members.", ephemeral=True)
+    emoji_removed = await clear_holiday_emojis(ctx.guild)
+    await ctx.followup.send(f"Removed all holiday roles from {removed} member(s) and deleted {emoji_removed} emoji(s).", ephemeral=True)
 
 @bot.slash_command(name="color", description="Change the color of the Dead Chat role")
 async def color_cycle(ctx):
