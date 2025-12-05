@@ -1,4 +1,6 @@
 # ============================================================
+# THIS IS THE MEMBER BOT
+#
 # Grok & ChatGPT RULES FOR THIS FILE (DO NOT VIOLATE)
 #
 # • Use ONLY these sections, in this exact order:
@@ -929,17 +931,6 @@ async def on_voice_state_update(member, before, after):
 
 
 ############### COMMAND GROUPS ###############
-@bot.slash_command(name="commands", description="Admin / Announcer commands")
-async def commands(ctx):
-    if not (ctx.author.guild_permissions.administrator or ctx.guild.owner_id == ctx.author.id):
-        return await ctx.respond("Admin only.", ephemeral=True)
-    embed = discord.Embed(title="Admin Commands", color=0xff6b6b)
-    embed.add_field(name="Birthdays", value="• </set_for:1440919374310408235>\n• </remove_for:1440954448468774922>", inline=False)
-    embed.add_field(name="Movie Night", value="• </random:1442017303230156963> – Force pick", inline=False)
-    embed.add_field(name="Holidays", value="• </holiday_add:1442616885802832115>\n• </holiday_remove:1442616885802832116>", inline=False)
-    embed.set_footer(text="Also: /say")
-    await ctx.respond(embed=embed, ephemeral=True)
-
 @bot.slash_command(name="editbotmsg", description="Edit a bot message in this channel with up to 4 lines")
 async def editbotmsg(
     ctx,
@@ -1221,50 +1212,6 @@ async def random_pick(ctx):
             await msg.add_reaction(emoji)
     await ctx.followup.send("Winner announced in both channels.", ephemeral=True)
 
-@bot.slash_command(name="test_movie_announce", description="[TEST] Preview winner message + rating bar")
-async def test_movie_announce(
-    ctx,
-    title: discord.Option(str, "Movie title", default="Test Movie"),
-    user: discord.Option(discord.Member, "Who to tag as winner", required=False)
-):
-    if not (ctx.author.guild_permissions.administrator or ctx.guild.owner_id == ctx.author.id):
-        return await ctx.respond("Admin only.", ephemeral=True)
-    await ctx.defer(ephemeral=True)
-    winner = user or ctx.author
-    mention = winner.mention
-    rollover = 5
-    rollover_text = f"\n\n{rollover} movie{'s' if rollover != 1 else ''} would roll over."
-    announcement = (
-        f"# Tonight's Movie Winner!\n"
-        f"**{title}**\n"
-        f"{mention}'s pick!{rollover_text}"
-    )
-    channel = ctx.guild.get_channel(MOVIE_NIGHT_ANNOUNCEMENT_CHANNEL_ID)
-    if not channel:
-        return await ctx.followup.send("Channel ID wrong.", ephemeral=True)
-    msg = await channel.send(announcement)
-    for emoji in ["😍", "😃", "🙂", "🫤", "😒", "🤢"]:
-        await msg.add_reaction(emoji)
-    await ctx.followup.send(f"Test posted → {channel.mention}", ephemeral=True)
-
-@bot.slash_command(name="holiday_add", description="Apply a holiday theme to the server")
-async def holiday_add(ctx, holiday: discord.Option(str, choices=["christmas", "halloween"])):
-    if not (ctx.author.guild_permissions.administrator or ctx.guild.owner_id == ctx.author.id):
-        return await ctx.respond("Admin only.", ephemeral=True)
-    await ctx.defer(ephemeral=True)
-    added = await apply_holiday_theme(ctx.guild, holiday)
-    emoji_created = await apply_holiday_emojis(ctx.guild, holiday)
-    await ctx.followup.send(f"Applied {holiday.capitalize()} theme to {added} member(s) and created {emoji_created} emoji(s).", ephemeral=True)
-
-@bot.slash_command(name="holiday_remove", description="Remove the holiday theme from the server")
-async def holiday_remove(ctx):
-    if not (ctx.author.guild_permissions.administrator or ctx.guild.owner_id == ctx.author.id):
-        return await ctx.respond("Admin only.", ephemeral=True)
-    await ctx.defer(ephemeral=True)
-    removed = await clear_holiday_theme(ctx.guild)
-    emoji_removed = await clear_holiday_emojis(ctx.guild)
-    await ctx.followup.send(f"Removed all holiday roles from {removed} member(s) and deleted {emoji_removed} emoji(s).", ephemeral=True)
-
 @bot.slash_command(name="color", description="Change the color of the Dead Chat role")
 async def color_cycle(ctx):
     dead_chat_role = ctx.guild.get_role(DEAD_CHAT_ROLE_ID) if DEAD_CHAT_ROLE_ID != 0 else None
@@ -1291,15 +1238,15 @@ async def say(ctx, message: str):
     await ctx.channel.send(message)
     await ctx.respond("Sent!", ephemeral=True)
 
-@bot.slash_command(name="qotd_now", description="Post today's QOTD immediately (admin only)")
-async def qotd_now(ctx):
+@bot.slash_command(name="qotd_send", description="Post today's QOTD immediately (admin only)")
+async def qotd_send(ctx):
     if not (ctx.author.guild_permissions.administrator or ctx.guild.owner_id == ctx.author.id):
         return await ctx.respond("Admin only", ephemeral=True)
     await ctx.defer(ephemeral=True)
     try:
         await post_daily_qotd()
     except Exception as e:
-        print("QOTD_NOW ERROR:", repr(e))
+        print("qotd_send ERROR:", repr(e))
         traceback.print_exc()
         return await ctx.followup.send(f"QOTD error: `{type(e).__name__}` – `{repr(e)}`", ephemeral=True)
     await ctx.followup.send("QOTD posted!", ephemeral=True)
