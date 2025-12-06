@@ -74,7 +74,7 @@ QOTD_CHANNEL_ID = _env_int("QOTD_CHANNEL_ID", 0)
 DEFAULT_ICON_URL = os.getenv("DEFAULT_ICON_URL", "")
 CHRISTMAS_ICON_URL = os.getenv("CHRISTMAS_ICON_URL", "")
 HALLOWEEN_ICON_URL = os.getenv("HALLOWEEN_ICON_URL", "")
-CHRISTMAS_ROLES = {"Cranberry": "Admin", "Candy Cane": "Original Member", "Grinch": "Member", "Christmas": "Bots"}
+CHRISTMAS_ROLES = {"Santa": "Admin", "Grinch": "Original Member", "Cranberry": "Member", "Christmas": "Bots"}
 HALLOWEEN_ROLES = {"Cauldron": "Admin", "Candy": "Original Member", "Witchy": "Member", "Halloween": "Bots"}
 
 DEAD_CHAT_ROLE_ID = _env_int("DEAD_CHAT_ROLE_ID", 0)
