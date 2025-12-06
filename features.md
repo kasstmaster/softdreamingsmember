@@ -45,7 +45,7 @@ Pool Management
 
 Users can add movies via browsing, searching, or using message buttons.
 
-Enforces:
+**Enforces:**
 
 No duplicate titles
 
@@ -146,7 +146,7 @@ Admins can make the bot send arbitrary messages in the current channel.
 # 10. Persistent Storage Architecture
 Storage Messages
 
-Uses two hidden storage messages:
+**Uses two hidden storage messages:**
 
 Birthday data
 
