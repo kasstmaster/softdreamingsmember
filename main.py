@@ -1,8 +1,7 @@
 # ============================================================
 # BOT NAME: MEMBER BOT
-#
-# Grok & ChatGPT RULES FOR THIS FILE (DO NOT VIOLATE)
-#
+# ============================================================
+# RULES FOR CHATGPT AND GROK (DO NOT VIOLATE)
 # • Use ONLY these sections, in this exact order:
 #   ############### IMPORTS ###############
 #   ############### CONSTANTS & CONFIG ###############
@@ -14,7 +13,6 @@
 #   ############### EVENT HANDLERS ###############
 #   ############### COMMAND GROUPS ###############
 #   ############### ON_READY & BOT START ###############
-# 
 # • Do NOT add any other sections.
 # • Do NOT add comments, notes, or explanations inside the code.
 # ============================================================
@@ -22,7 +20,6 @@
 #    Small private server • 25 members • ages 25-40
 #    Vibe: Close friends, chill hangout with movie nights, daily QOTD, video games, and role games
 #    Our two custom bots run everything: Admin Bot & Member Bot 
-#
 # Fun channels (general channels not listed here)
 #   #• k – We just type “k” (yes really)
 #   #• codes – Where we post video game codes.
@@ -30,7 +27,6 @@
 #   #• movies – Where the movie night pool is posted.
 #   #• ratings – Where we rate movies we’ve just watched.
 #   #• QOTD – The most used feature in our server, hilarious responses.
-#
 # Role: Owner
 #   Permissions: Full permissions
 #   Commands: All commands
