@@ -147,9 +147,22 @@ async def log_exception(tag: str, exc: Exception):
     await log_to_thread(text)
 
 async def run_startup_checks():
+    global storage_message_id, pool_storage_message_id
+
     lines = []
     lines.append("Startup check report:")
     lines.append("")
+
+    lines.append("[LOGGING]")
+    log_channel = bot.get_channel(BOT_LOG_THREAD_ID) if BOT_LOG_THREAD_ID else None
+    if BOT_LOG_THREAD_ID == 0:
+        lines.append("⚠️ BOT_LOG_THREAD_ID missing or zero")
+    elif log_channel is None:
+        lines.append("⚠️ Log thread channel not found; logging to thread will fail")
+    else:
+        lines.append(f"✅ Log thread configured in channel {BOT_LOG_THREAD_ID}")
+    lines.append("")
+
     lines.append("[STORAGE]")
 
     storage_ok = False
@@ -159,7 +172,20 @@ async def run_startup_checks():
     except Exception as e:
         await log_exception("startup_check_storage", e)
         storage_ok = False
-    lines.append("✅ Birthday storage" if storage_ok else "⚠️ Birthday storage")
+    if storage_ok:
+        lines.append("✅ Birthday storage data")
+    else:
+        lines.append("⚠️ Birthday storage data")
+
+    birthday_storage_binding_ok = (
+        storage_message_id is not None
+        and BIRTHDAY_STORAGE_CHANNEL_ID != 0
+        and bot.get_channel(BIRTHDAY_STORAGE_CHANNEL_ID) is not None
+    )
+    if birthday_storage_binding_ok:
+        lines.append(f"✅ Birthday storage message binding (msg_id={storage_message_id}, channel_id={BIRTHDAY_STORAGE_CHANNEL_ID})")
+    else:
+        lines.append("⚠️ Birthday storage message binding (missing channel or message)")
 
     pool_ok = False
     try:
@@ -168,7 +194,20 @@ async def run_startup_checks():
     except Exception as e:
         await log_exception("startup_check_pool", e)
         pool_ok = False
-    lines.append("✅ Pool storage" if pool_ok else "⚠️ Pool storage")
+    if pool_ok:
+        lines.append("✅ Pool storage data")
+    else:
+        lines.append("⚠️ Pool storage data")
+
+    pool_storage_binding_ok = (
+        pool_storage_message_id is not None
+        and BIRTHDAY_STORAGE_CHANNEL_ID != 0
+        and bot.get_channel(BIRTHDAY_STORAGE_CHANNEL_ID) is not None
+    )
+    if pool_storage_binding_ok:
+        lines.append(f"✅ Pool storage message binding (msg_id={pool_storage_message_id}, channel_id={BIRTHDAY_STORAGE_CHANNEL_ID})")
+    else:
+        lines.append("⚠️ Pool storage message binding (missing channel or message)")
 
     lines.append("")
     lines.append("[QOTD / MEDIA]")
@@ -186,41 +225,10 @@ async def run_startup_checks():
         lines.append("⚠️ Movie list not initialized")
 
     lines.append("")
-    lines.append("[RUNTIME CONFIG]")
-
-    guild = bot.guilds[0] if bot.guilds else None
-    if not guild:
-        lines.append("⚠️ No guilds connected")
-    else:
-        def chan_ok(cid: int) -> bool:
-            return bool(cid) and guild.get_channel(cid) is not None
-
-        if chan_ok(RATING_CHANNEL_ID):
-            lines.append("✅ Movie rating channel")
-        else:
-            lines.append("⚠️ Movie rating channel missing or invalid")
-
-        lines.append("✅ QOTD channel" if chan_ok(QOTD_CHANNEL_ID) else "⚠️ QOTD channel")
-
-        lines.append(
-            "✅ Birthday storage channel"
-            if chan_ok(BIRTHDAY_STORAGE_CHANNEL_ID)
-            else "⚠️ Birthday storage channel"
-        )
-
-    lines.append("")
     lines.append("[HOLIDAY THEMES]")
 
     emoji_names = _collect_holiday_emoji_names()
-    lines.append("✅ Holiday emoji config" if emoji_names else "⚠️ Holiday emoji config")
-
-    lines.append("✅ Christmas role templates" if CHRISTMAS_ROLES else "⚠️ Christmas role templates")
-    lines.append("✅ Halloween role templates" if HALLOWEEN_ROLES else "⚠️ Halloween role templates")
-
-    text = "\n".join(lines)
-    if len(text) > 1900:
-        text = text[:1900]
-    await log_to_thread(text)
+    if emoji_n_
 
 def build_mm_dd(month_name: str, day: int) -> str | None:
     month_num = MONTH_TO_NUM.get(month_name)
