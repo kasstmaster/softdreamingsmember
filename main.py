@@ -96,8 +96,7 @@ else:
     print("QOTD disabled: missing GOOGLE_CREDENTIALS or GOOGLE_SHEET_ID")
     
 ENABLE_TV_IN_PICK = False
-MOVIE_NIGHT_ANNOUNCEMENT_CHANNEL_ID = _env_int("MOVIE_NIGHT_ANNOUNCEMENT_CHANNEL_ID", 0)  # ・Movies
-SECOND_MOVIE_ANNOUNCEMENT_CHANNEL_ID = _env_int("SECOND_MOVIE_ANNOUNCEMENT_CHANNEL_ID", 0)  # ・Ratings
+RATING_CHANNEL_ID = _env_int("RATING_CHANNEL_ID", 0)  # ・Ratings
 MOVIE_STORAGE_CHANNEL_ID = _env_int("MOVIE_STORAGE_CHANNEL_ID", 0)  # For trailer messages linked to sheets
 MAX_POOL_ENTRIES_PER_USER = _env_int("MAX_POOL_ENTRIES_PER_USER", 3) 
 PAGE_SIZE = 25
@@ -116,8 +115,6 @@ DEAD_CHAT_COLORS = [discord.Color.red(), discord.Color.orange(), discord.Color.g
 
 BIRTHDAY_ROLE_ID = _env_int("BIRTHDAY_ROLE_ID", 0)  # The role given when it is their birthday
 BIRTHDAY_STORAGE_CHANNEL_ID = _env_int("BIRTHDAY_STORAGE_CHANNEL_ID", 0)
-BIRTHDAY_LIST_CHANNEL_ID = _env_int("BIRTHDAY_LIST_CHANNEL_ID", 0)
-BIRTHDAY_LIST_MESSAGE_ID = _env_int("BIRTHDAY_LIST_MESSAGE_ID", 0)
 MONTH_CHOICES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
 MONTH_TO_NUM = {name: f"{i:02d}" for i, name in enumerate(MONTH_CHOICES, start=1)}
 
@@ -198,10 +195,10 @@ async def run_startup_checks():
         def chan_ok(cid: int) -> bool:
             return bool(cid) and guild.get_channel(cid) is not None
 
-        if chan_ok(MOVIE_NIGHT_ANNOUNCEMENT_CHANNEL_ID) and chan_ok(SECOND_MOVIE_ANNOUNCEMENT_CHANNEL_ID):
-            lines.append("✅ Movie announcement channels")
+        if chan_ok(RATING_CHANNEL_ID):
+            lines.append("✅ Movie rating channel")
         else:
-            lines.append("⚠️ Movie announcement channels")
+            lines.append("⚠️ Movie rating channel missing or invalid")
 
         lines.append("✅ QOTD channel" if chan_ok(QOTD_CHANNEL_ID) else "⚠️ QOTD channel")
 
@@ -210,15 +207,6 @@ async def run_startup_checks():
             if chan_ok(BIRTHDAY_STORAGE_CHANNEL_ID)
             else "⚠️ Birthday storage channel"
         )
-
-        if BIRTHDAY_LIST_CHANNEL_ID:
-            lines.append(
-                "✅ Birthday list channel"
-                if chan_ok(BIRTHDAY_LIST_CHANNEL_ID)
-                else "⚠️ Birthday list channel"
-            )
-        else:
-            lines.append("⚠️ Birthday list channel not configured")
 
     lines.append("")
     lines.append("[HOLIDAY THEMES]")
@@ -474,8 +462,6 @@ async def get_birthday_public_location(guild_id: int):
             msg_id = pm.get("message_id")
             if isinstance(ch_id, int) and isinstance(msg_id, int):
                 return ch_id, msg_id
-    if BIRTHDAY_LIST_CHANNEL_ID and BIRTHDAY_LIST_MESSAGE_ID:
-        return BIRTHDAY_LIST_CHANNEL_ID, BIRTHDAY_LIST_MESSAGE_ID
     return None
 
 async def set_birthday_public_location(guild_id: int, channel_id: int, message_id: int):
@@ -1319,34 +1305,41 @@ async def random_pick(ctx):
     pool = request_pool.get(ctx.guild.id, [])
     if not pool:
         return await ctx.followup.send("Pool is empty.", ephemeral=True)
+
     winner_idx = pyrandom.randrange(len(pool))
     winner_id, winner_title = pool[winner_idx]
+
     request_pool[ctx.guild.id] = [e for i, e in enumerate(pool) if i != winner_idx]
     await save_request_pool()
     await update_pool_public_message(ctx.guild)
+
     member = ctx.guild.get_member(winner_id)
     mention = member.mention if member else f"<@{winner_id}>"
+
     rollover = len(request_pool[ctx.guild.id])
     rollover_text = (
         f"\n\n{rollover} movie{'s' if rollover != 1 else ''} rolled over to the next pool"
         if rollover else ""
     )
+
     first_text = (
         f"Pool Winner: **{winner_title}**\n"
         f"{mention}'s pick!{rollover_text}\n\n"
     )
-    primary_channel = ctx.guild.get_channel(MOVIE_NIGHT_ANNOUNCEMENT_CHANNEL_ID)
-    if primary_channel:
-        await primary_channel.send(first_text)
-    second_channel = ctx.guild.get_channel(SECOND_MOVIE_ANNOUNCEMENT_CHANNEL_ID)
+
+    await ctx.channel.send(first_text)
+
+    second_channel = ctx.guild.get_channel(RATING_CHANNEL_ID)
     if second_channel:
-        second_text = (
-            f"**{winner_title}**"
-        )
+        second_text = f"**{winner_title}**"
         msg = await second_channel.send(second_text)
         for emoji in ["😍", "😃", "🙂", "🫤", "😒", "🤢"]:
             await msg.add_reaction(emoji)
-    await ctx.followup.send("Winner announced in both channels.", ephemeral=True)
+        summary = "Winner announced here and in the rating channel."
+    else:
+        summary = "Winner announced here. Rating channel not configured."
+
+    await ctx.followup.send(summary, ephemeral=True)
 
 @bot.slash_command(name="color", description="Change the color of the Dead Chat role")
 async def color_cycle(ctx):
