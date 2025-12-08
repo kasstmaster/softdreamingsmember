@@ -103,9 +103,9 @@ PAGE_SIZE = 25
 
 QOTD_CHANNEL_ID = _env_int("QOTD_CHANNEL_ID", 0)
 
-DEFAULT_ICON_URL = os.getenv("DEFAULT_ICON_URL", "")
-CHRISTMAS_ICON_URL = os.getenv("CHRISTMAS_ICON_URL", "")
-HALLOWEEN_ICON_URL = os.getenv("HALLOWEEN_ICON_URL", "")
+ICON_DEFAULT_URL = os.getenv("ICON_DEFAULT_URL", "")
+ICON_CHRISTMAS_URL = os.getenv("ICON_CHRISTMAS_URL", "")
+ICON_HALLOWEEN_URL = os.getenv("ICON_HALLOWEEN_URL", "")
 CHRISTMAS_ROLES = {"Sandy Claws": "Admin", "Grinch": "Original Member", "Cranberry": "Member", "Christmas": "Bots"}
 HALLOWEEN_ROLES = {"Cauldron": "Admin", "Candy": "Original Member", "Witchy": "Member", "Halloween": "Bots"}
 
@@ -246,20 +246,20 @@ async def run_startup_checks():
     else:
         lines.append("⚠️ **Halloween role templates** — Halloween role mapping is not defined, so seasonal Halloween roles cannot be assigned.")
 
-    if DEFAULT_ICON_URL:
+    if ICON_DEFAULT_URL:
         lines.append("✅ Default icon URL")
     else:
-        lines.append("⚠️ **Default icon URL** — DEFAULT_ICON_URL is missing, so the bot and server icons cannot revert to a non-holiday default.")
+        lines.append("⚠️ **Default icon URL** — ICON_DEFAULT_URL is missing, so the bot and server icons cannot revert to a non-holiday default.")
 
-    if CHRISTMAS_ICON_URL:
+    if ICON_CHRISTMAS_URL:
         lines.append("✅ Christmas icon URL")
     else:
-        lines.append("⚠️ **Christmas icon URL** — CHRISTMAS_ICON_URL is missing, so the Christmas theme cannot update the bot or server icon.")
+        lines.append("⚠️ **Christmas icon URL** — ICON_CHRISTMAS_URL is missing, so the Christmas theme cannot update the bot or server icon.")
 
-    if HALLOWEEN_ICON_URL:
+    if ICON_HALLOWEEN_URL:
         lines.append("✅ Halloween icon URL")
     else:
-        lines.append("⚠️ **Halloween icon URL** — HALLOWEEN_ICON_URL is missing, so the Halloween theme cannot update the bot or server icon.")
+        lines.append("⚠️ **Halloween icon URL** — ICON_HALLOWEEN_URL is missing, so the Halloween theme cannot update the bot or server icon.")
 
     lines.append("")
     lines.append("[PER-GUILD CONFIG]")
@@ -722,7 +722,7 @@ async def apply_holiday_theme(guild: discord.Guild, holiday: str) -> int:
                         added += 1
                     except:
                         pass
-    icon_url = CHRISTMAS_ICON_URL if holiday == "christmas" else HALLOWEEN_ICON_URL
+    icon_url = ICON_CHRISTMAS_URL if holiday == "christmas" else ICON_HALLOWEEN_URL
     await apply_icon_to_bot_and_server(guild, icon_url)
     return added
 
@@ -738,7 +738,7 @@ async def clear_holiday_theme(guild: discord.Guild) -> int:
                         removed += 1
                     except:
                         pass
-    await apply_icon_to_bot_and_server(guild, DEFAULT_ICON_URL)
+    await apply_icon_to_bot_and_server(guild, ICON_DEFAULT_URL)
     return removed
 
 async def apply_icon_to_bot_and_server(guild: discord.Guild, url: str):
