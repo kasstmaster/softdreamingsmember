@@ -127,10 +127,13 @@ pool_storage_message_id: int | None = None
 pool_message_locations: dict[int, tuple[int, int]] = {}
 movie_titles: list[dict] = []
 request_pool: dict[int, list[tuple[int, str]]] = {}
+startup_logging_done: bool = False
 
 
 ############### HELPER FUNCTIONS ###############
 async def log_to_thread(content: str):
+    if startup_logging_done:
+        return
     channel = bot.get_channel(BOT_LOG_THREAD_ID)
     if not channel:
         return
@@ -1152,6 +1155,8 @@ async def on_ready():
     bot.loop.create_task(holiday_scheduler())
     await log_to_thread("Schedulers started: birthday_checker, qotd_scheduler, holiday_scheduler.")
     print("QOTD scheduler started + Google Sheets ready!")
+    global startup_logging_done
+    startup_logging_done = True
 
 @bot.event
 async def on_member_join(member):
