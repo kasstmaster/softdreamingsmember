@@ -137,13 +137,7 @@ async def log_to_thread(content: str):
         startup_log_buffer.append(content)
         return
     channel = bot.get_channel(BOT_LOG_THREAD_ID)
-    if channel is None and BOT_LOG_THREAD_ID:
-        try:
-            channel = await bot.fetch_channel(BOT_LOG_THREAD_ID)
-        except Exception:
-            channel = None
     if not channel:
-        print(f"[LOG] {content}")
         return
     try:
         await channel.send(content)
@@ -157,57 +151,12 @@ async def log_exception(tag: str, exc: Exception):
         text = text[:1900]
     await log_to_thread(text)
 
-async def flush_startup_logs():
-    if not startup_log_buffer:
-        return
-    channel = bot.get_channel(BOT_LOG_THREAD_ID) if BOT_LOG_THREAD_ID != 0 else None
-    if not channel:
-        return
-    report_entries = []
-    scheduler_started = []
-    sched_summary = []
-    startup_lines = []
-    all_passed_lines = []
-    ready_lines = []
-    other = []
-    for entry in startup_log_buffer:
-        if "[LOGGING]" in entry and "[STORAGE]" in entry and "[QOTD / MEDIA]" in entry:
-            report_entries.append(entry)
-        elif entry.startswith("birthday_checker started.") or entry.startswith("qotd_scheduler started.") or entry.startswith("theme_scheduler started."):
-            scheduler_started.append(entry)
-        elif entry.startswith("Schedulers started:"):
-            sched_summary.append(entry)
-        elif entry.startswith("[STARTUP]"):
-            startup_lines.append(entry)
-        elif entry.startswith("All systems passed basic storage + runtime checks."):
-            all_passed_lines.append(entry)
-        elif entry.startswith("Bot ready as "):
-            ready_lines.append(entry)
-        elif not entry.startswith("Startup:"):
-            other.append(entry)
-    parts = ["---------------------------- STARTUP LOGS ----------------------------", ""]
-    if report_entries:
-        parts.append(report_entries[0])
-    if other:
-        parts.append("")
-        parts.extend(other)
-    tail_present = scheduler_started or sched_summary or startup_lines or all_passed_lines or ready_lines
-    if tail_present:
-        parts.append("")
-        parts.extend(scheduler_started)
-        parts.extend(sched_summary)
-        parts.extend(startup_lines)
-        parts.extend(all_passed_lines)
-        parts.extend(ready_lines)
-    text = "\n".join(parts)
-    if len(text) > 1900:
-        text = text[:1900]
-    await channel.send(text)
-
 async def run_startup_checks():
     global storage_message_id, pool_storage_message_id
 
     lines = []
+    lines.append("Startup check report:")
+    lines.append("")
 
     lines.append("[LOGGING]")
     log_channel = bot.get_channel(BOT_LOG_THREAD_ID) if BOT_LOG_THREAD_ID else None
@@ -381,23 +330,16 @@ async def run_startup_checks():
         else:
             lines.append(f"`⚠️` VC-status role {vc_role_id} not found")
 
+    lines.append("")
+    lines.append("")
+    lines.append("All systems passed basic storage + runtime checks.")
+    lines.append(f"[STARTUP] Member Bot ready as {bot.user} in {len(bot.guilds)} guild(s).")
+    lines.append("Schedulers started: birthday_checker, qotd_scheduler, theme_scheduler.")
+
     text = "\n".join(lines)
     if len(text) > 1900:
         text = text[:1900]
-    header = "---------------------------- STARTUP LOGS ----------------------------\n"
-    full = header + text
-    channel = bot.get_channel(BOT_LOG_THREAD_ID) if BOT_LOG_THREAD_ID != 0 else None
-    if channel is None and BOT_LOG_THREAD_ID:
-        try:
-            channel = await bot.fetch_channel(BOT_LOG_THREAD_ID)
-        except Exception:
-            channel = None
-    if channel:
-        if len(full) > 1900:
-            full = full[:1900]
-        await channel.send(full)
-    else:
-        print(full)
+    await log_to_thread(text)
     
 def build_mm_dd(month_name: str, day: int) -> str | None:
     month_num = MONTH_TO_NUM.get(month_name)
@@ -1138,6 +1080,7 @@ async def qotd_scheduler():
     await bot.wait_until_ready()
     TARGET_HOUR_UTC = 17
     TARGET_MINUTE = 0
+    await log_to_thread("qotd_scheduler started.")
     while not bot.is_closed():
         now = datetime.utcnow()
         if now.hour == TARGET_HOUR_UTC and now.minute == TARGET_MINUTE:
@@ -1152,6 +1095,7 @@ async def theme_scheduler():
     await bot.wait_until_ready()
     TARGET_HOUR_UTC = 9
     TARGET_MINUTE = 0
+    await log_to_thread("theme_scheduler started.")
     while not bot.is_closed():
         now = datetime.utcnow()
         if now.hour == TARGET_HOUR_UTC and now.minute == TARGET_MINUTE:
@@ -1168,6 +1112,7 @@ async def birthday_checker():
     await bot.wait_until_ready()
     TARGET_HOUR_UTC = 15
     TARGET_MINUTE = 0
+    await log_to_thread("birthday_checker started.")
     while not bot.is_closed():
         now = datetime.utcnow()
         if now.hour == TARGET_HOUR_UTC and now.minute == TARGET_MINUTE:
@@ -1195,33 +1140,21 @@ async def birthday_checker():
 ############### EVENT HANDLERS ###############
 @bot.event
 async def on_ready():
-    global startup_logging_done, startup_log_buffer
-
     print(f"{bot.user} is online!")
     bot.add_view(GameNotificationView())
-
     await run_all_inits_with_logging()
-    await run_startup_checks()
-    await log_to_thread(f"Bot ready as {bot.user} in {len(bot.guilds)} guild(s).")
+    await log_to_bot_channel(f"Bot ready as {bot.user} in {len(bot.guilds)} guild(s).")
 
+    global startup_logging_done, startup_log_buffer
     try:
         channel = bot.get_channel(BOT_LOG_THREAD_ID) if BOT_LOG_THREAD_ID != 0 else None
-        if channel is None and BOT_LOG_THREAD_ID:
-            try:
-                channel = await bot.fetch_channel(BOT_LOG_THREAD_ID)
-            except Exception:
-                channel = None
         if channel and startup_log_buffer:
             big_text = "---------------------------- STARTUP LOGS ----------------------------\n" + "\n".join(startup_log_buffer)
             if len(big_text) > 1900:
                 big_text = big_text[:1900]
             await channel.send(big_text)
-        elif startup_log_buffer:
-            print("---------------------------- STARTUP LOGS ----------------------------")
-            print("\n".join(startup_log_buffer))
     except Exception:
         pass
-
     startup_logging_done = True
     startup_log_buffer = []
 
@@ -1234,7 +1167,7 @@ async def on_ready():
         print("STORAGE NOT INITIALIZED — Run /sticky_init, /prize_init and /deadchat_init")
     else:
         await initialize_dead_chat()
-        
+
 @bot.event
 async def on_member_join(member):
     try:
