@@ -19,7 +19,7 @@
 # • Movie Night: sheet sync, pool system, random winner, rating announcements
 # • Birthdays: storage, daily role assignment, public birthday list
 # • QOTD: seasonal sheet selection, daily scheduler, posting logic
-# • Seasonal Themes: holiday roles, emojis, server/bot icons
+# • Seasonal Themes: themed roles, emojis, server/bot icons
 # • Member Tools: Dead Chat color cycle, VC-status role, admin utilities
 # ============================================================
 # SERVER: Soft Dreamings (≈25 members, ages 25–40)
@@ -106,8 +106,8 @@ QOTD_CHANNEL_ID = _env_int("QOTD_CHANNEL_ID", 0)
 ICON_DEFAULT_URL = os.getenv("ICON_DEFAULT_URL", "")
 ICON_CHRISTMAS_URL = os.getenv("ICON_CHRISTMAS_URL", "")
 ICON_HALLOWEEN_URL = os.getenv("ICON_HALLOWEEN_URL", "")
-CHRISTMAS_ROLES = {"Sandy Claws": "Admin", "Grinch": "Original Member", "Cranberry": "Member", "Christmas": "Bots"}
-HALLOWEEN_ROLES = {"Cauldron": "Admin", "Candy": "Original Member", "Witchy": "Member", "Halloween": "Bots"}
+CHRISTMAS_THEME_ROLES = {"Sandy Claws": "Admin", "Grinch": "Original Member", "Cranberry": "Member", "Christmas": "Bots"}
+HALLOWEEN_THEME_ROLES = {"Cauldron": "Admin", "Candy": "Original Member", "Witchy": "Member", "Halloween": "Bots"}
 
 DEAD_CHAT_ROLE_ID = _env_int("DEAD_CHAT_ROLE_ID", 0)
 DEAD_CHAT_ROLE_NAME = os.getenv("DEAD_CHAT_ROLE_NAME", "Dead Chat")
@@ -231,20 +231,20 @@ async def run_startup_checks():
         lines.append("⚠️ **Movie list initialization** — Movie list is not a valid list object, so media-based commands depending on it will fail.")
 
     lines.append("")
-    lines.append("[HOLIDAY THEMES]")
+    lines.append("[THEMES]")
 
-    emoji_names = _collect_holiday_emoji_names()
+    emoji_names = _collect_theme_emoji_names()
     if emoji_names:
-        lines.append(f"✅ Holiday emoji config ({len(emoji_names)} name(s))")
+        lines.append(f"✅ Theme emoji config ({len(emoji_names)} name(s))")
     else:
-        lines.append("⚠️ **Holiday emoji config** — Holiday emoji environment JSON is missing, invalid, or empty, so seasonal emojis cannot be created.")
+        lines.append("⚠️ **Theme emoji config** — Theme emoji environment JSON is missing, invalid, or empty, so seasonal emojis cannot be created.")
 
-    if CHRISTMAS_ROLES:
+    if CHRISTMAS_THEME_ROLES:
         lines.append("✅ Christmas role templates")
     else:
         lines.append("⚠️ **Christmas role templates** — Christmas role mapping is not defined, so seasonal Christmas roles cannot be assigned.")
 
-    if HALLOWEEN_ROLES:
+    if HALLOWEEN_THEME_ROLES:
         lines.append("✅ Halloween role templates")
     else:
         lines.append("⚠️ **Halloween role templates** — Halloween role mapping is not defined, so seasonal Halloween roles cannot be assigned.")
@@ -252,7 +252,7 @@ async def run_startup_checks():
     if ICON_DEFAULT_URL:
         lines.append("✅ Default icon URL")
     else:
-        lines.append("⚠️ **Default icon URL** — ICON_DEFAULT_URL is missing, so the bot and server icons cannot revert to a non-holiday default.")
+        lines.append("⚠️ **Default icon URL** — ICON_DEFAULT_URL is missing, so the bot and server icons cannot revert to a non-themed default.")
 
     if ICON_CHRISTMAS_URL:
         lines.append("✅ Christmas icon URL")
@@ -710,27 +710,27 @@ def find_role_by_name(guild: discord.Guild, name: str) -> discord.Role | None:
             return role
     return None
 
-async def apply_theme_for_today_in_guild(guild: discord.Guild, today: str | None = None):
+async def apply_theme_for_today(guild: discord.Guild, today: str | None = None):
     if today is None:
         today = datetime.utcnow().strftime("%m-%d")
-    removed_roles = await clear_holiday_theme(guild)
-    removed_emojis = await clear_holiday_emojis(guild)
+    removed_roles = await clear_theme_roles(guild)
+    removed_emojis = await clear_theme_emojis(guild)
     added_roles = 0
     added_emojis = 0
     mode = "none"
     if "10-01" <= today <= "10-31":
-        added_roles = await apply_holiday_theme(guild, "halloween")
-        added_emojis = await apply_holiday_emojis(guild, "halloween")
+        added_roles = await apply_theme_roles(guild, "halloween")
+        added_emojis = await apply_theme_emojis(guild, "halloween")
         mode = "halloween"
     elif "12-01" <= today <= "12-26":
-        added_roles = await apply_holiday_theme(guild, "christmas")
-        added_emojis = await apply_holiday_emojis(guild, "christmas")
+        added_roles = await apply_theme_roles(guild, "christmas")
+        added_emojis = await apply_theme_emojis(guild, "christmas")
         mode = "christmas"
     await log_to_thread(f"theme_update guild={guild.id} today={today} mode={mode} roles_cleared={removed_roles} emojis_cleared={removed_emojis} roles_added={added_roles} emojis_added={added_emojis}")
     return mode, removed_roles, removed_emojis, added_roles, added_emojis
 
-async def apply_holiday_theme(guild: discord.Guild, holiday: str) -> int:
-    role_map = CHRISTMAS_ROLES if holiday == "christmas" else HALLOWEEN_ROLES
+async def apply_theme_roles(guild: discord.Guild, theme: str) -> int:
+    role_map = CHRISTMAS_THEME_ROLES if theme == "christmas" else HALLOWEEN_THEME_ROLES
     added = 0
     for color_name, base_keyword in role_map.items():
         color_role = find_role_by_name(guild, color_name)
@@ -740,23 +740,23 @@ async def apply_holiday_theme(guild: discord.Guild, holiday: str) -> int:
             if any(base_keyword.lower() in r.name.lower() for r in member.roles):
                 if color_role not in member.roles:
                     try:
-                        await member.add_roles(color_role, reason=f"{holiday.capitalize()} theme")
+                        await member.add_roles(color_role, reason=f"{theme.capitalize()} theme")
                         added += 1
                     except:
                         pass
-    icon_url = ICON_CHRISTMAS_URL if holiday == "christmas" else ICON_HALLOWEEN_URL
+    icon_url = ICON_CHRISTMAS_URL if theme == "christmas" else ICON_HALLOWEEN_URL
     await apply_icon_to_bot_and_server(guild, icon_url)
     return added
 
-async def clear_holiday_theme(guild: discord.Guild) -> int:
+async def clear_theme_roles(guild: discord.Guild) -> int:
     removed = 0
-    for color_name in {**CHRISTMAS_ROLES, **HALLOWEEN_ROLES}:
+    for color_name in {**CHRISTMAS_THEME_ROLES, **HALLOWEEN_THEME_ROLES}:
         role = find_role_by_name(guild, color_name)
         if role:
             async for member in guild.fetch_members(limit=None):
                 if role in member.roles:
                     try:
-                        await member.remove_roles(role, reason="Holiday theme ended")
+                        await member.remove_roles(role, reason="Theme ended")
                         removed += 1
                     except:
                         pass
@@ -789,9 +789,9 @@ def _load_emoji_config_from_env(env_name: str) -> list[dict]:
         print(f"{env_name} JSON error: {repr(e)}")
     return []
 
-def _collect_holiday_emoji_names() -> set[str]:
+def _collect_theme_emoji_names() -> set[str]:
     names: set[str] = set()
-    for env_name in ("CHRISTMAS_EMOJIS", "HALLOWEEN_EMOJIS"):
+    for env_name in ("CHRISTMAS_THEME_EMOJIS", "HALLOWEEN_THEME_EMOJIS"):
         config = _load_emoji_config_from_env(env_name)
         for item in config:
             if not isinstance(item, dict):
@@ -801,8 +801,8 @@ def _collect_holiday_emoji_names() -> set[str]:
                 names.add(name)
     return names
 
-async def apply_holiday_emojis(guild: discord.Guild, holiday: str) -> int:
-    env_name = "CHRISTMAS_EMOJIS" if holiday == "christmas" else "HALLOWEEN_EMOJIS"
+async def apply_theme_emojis(guild: discord.Guild, theme: str) -> int:
+    env_name = "CHRISTMAS_THEME_EMOJIS" if theme == "christmas" else "HALLOWEEN_THEME_EMOJIS"
     config = _load_emoji_config_from_env(env_name)
     if not config:
         print(f"{env_name} is empty or invalid")
@@ -834,7 +834,7 @@ async def apply_holiday_emojis(guild: discord.Guild, holiday: str) -> int:
                     if resp.status != 200:
                         continue
                     data = await resp.read()
-                emoji = await guild.create_custom_emoji(name=name, image=data, reason=f"{holiday} emoji")
+                emoji = await guild.create_custom_emoji(name=name, image=data, reason=f"{theme} emoji")
                 print(f"EMOJI_CREATED {emoji.name} size={len(data)}")
                 existing_names.add(emoji.name)
                 created += 1
@@ -844,8 +844,8 @@ async def apply_holiday_emojis(guild: discord.Guild, holiday: str) -> int:
     await log_to_thread(f"{env_name}: created {created} emoji(s) in guild {guild.id}.")
     return created
 
-async def clear_holiday_emojis(guild: discord.Guild) -> int:
-    names = _collect_holiday_emoji_names()
+async def clear_theme_emojis(guild: discord.Guild) -> int:
+    names = _collect_theme_emoji_names()
     if not names:
         return 0
     removed = 0
@@ -853,12 +853,12 @@ async def clear_holiday_emojis(guild: discord.Guild) -> int:
         if emoji.name not in names:
             continue
         try:
-            await emoji.delete(reason="Holiday emoji cleanup")
+            await emoji.delete(reason="Theme emoji cleanup")
             removed += 1
         except Exception as e:
-            await log_exception(f"HOLIDAY_EMOJI_REMOVE_{emoji.name}", e)
+            await log_exception(f"THEME_EMOJI_REMOVE_{emoji.name}", e)
             continue
-    await log_to_thread(f"Holiday emoji cleanup: removed {removed} emoji(s) in guild {guild.id}.")
+    await log_to_thread(f"Theme emoji cleanup: removed {removed} emoji(s) in guild {guild.id}.")
     return removed
 
 def movie_night_time() -> str:
@@ -1087,20 +1087,20 @@ async def qotd_scheduler():
             await asyncio.sleep(61)
         await asyncio.sleep(30)
 
-async def holiday_scheduler():
+async def theme_scheduler():
     await bot.wait_until_ready()
     TARGET_HOUR_UTC = 9
     TARGET_MINUTE = 0
-    await log_to_thread("holiday_scheduler started.")
+    await log_to_thread("theme_scheduler started.")
     while not bot.is_closed():
         now = datetime.utcnow()
         if now.hour == TARGET_HOUR_UTC and now.minute == TARGET_MINUTE:
             today = now.strftime("%m-%d")
             for guild in bot.guilds:
                 try:
-                    await apply_theme_for_today_in_guild(guild, today)
+                    await apply_theme_for_today(guild, today)
                 except Exception as e:
-                    await log_exception(f"holiday_scheduler_guild_{guild.id}", e)
+                    await log_exception(f"theme_scheduler_guild_{guild.id}", e)
             await asyncio.sleep(61)
         await asyncio.sleep(30)
 
@@ -1152,8 +1152,8 @@ async def on_ready():
 
     bot.loop.create_task(birthday_checker())
     bot.loop.create_task(qotd_scheduler())
-    bot.loop.create_task(holiday_scheduler())
-    await log_to_thread("Schedulers started: birthday_checker, qotd_scheduler, holiday_scheduler.")
+    bot.loop.create_task(theme_scheduler())
+    await log_to_thread("Schedulers started: birthday_checker, qotd_scheduler, theme_scheduler.")
     print("QOTD scheduler started + Google Sheets ready!")
     global startup_logging_done
     startup_logging_done = True
@@ -1529,13 +1529,13 @@ async def theme_update(ctx):
         return await ctx.respond("Admin only.", ephemeral=True)
     await ctx.defer(ephemeral=True)
     today = datetime.utcnow().strftime("%m-%d")
-    mode, removed_roles, removed_emojis, added_roles, added_emojis = await apply_theme_for_today_in_guild(ctx.guild, today)
+    mode, removed_roles, removed_emojis, added_roles, added_emojis = await apply_theme_for_today(ctx.guild, today)
     if mode == "halloween":
         label = "Halloween theme applied."
     elif mode == "christmas":
         label = "Christmas theme applied."
     else:
-        label = "Cleared holiday theme and reverted to default."
+        label = "Cleared theme and reverted to default."
     summary = f"{label}\nRoles cleared: {removed_roles}\nEmojis cleared: {removed_emojis}\nRoles added: {added_roles}\nEmojis added: {added_emojis}"
     await ctx.followup.send(summary, ephemeral=True)
 
