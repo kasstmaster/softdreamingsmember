@@ -1180,8 +1180,10 @@ async def on_ready():
 
     print(f"{bot.user} is online!")
     bot.add_view(GameNotificationView())
+
     await run_all_inits_with_logging()
-    await log_to_bot_channel(f"Bot ready as {bot.user} in {len(bot.guilds)} guild(s).")
+    await run_startup_checks()
+    await log_to_thread(f"Bot ready as {bot.user} in {len(bot.guilds)} guild(s).")
 
     try:
         channel = bot.get_channel(BOT_LOG_THREAD_ID) if BOT_LOG_THREAD_ID != 0 else None
@@ -1205,7 +1207,7 @@ async def on_ready():
         print("STORAGE NOT INITIALIZED — Run /sticky_init, /prize_init and /deadchat_init")
     else:
         await initialize_dead_chat()
-
+        
 @bot.event
 async def on_member_join(member):
     try:
