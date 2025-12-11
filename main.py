@@ -270,41 +270,41 @@ async def run_startup_checks():
     lines.append("[PER-GUILD CONFIG]")
 
     if not bot.guilds:
-        lines.append("`✅` **Guild connectivity** — The bot is not connected to any guild, so no server features can run.")
+        lines.append("`⚠️` **Guild connectivity** — The bot is not connected to any guild, so no server features can run.")
     else:
         for guild in bot.guilds:
-            lines.append(f"- Guild: {guild.name} ({guild.id})")
+            lines.append(f"Guild: {guild.name} ({guild.id})")
 
             def chan_ok(cid: int) -> bool:
                 return bool(cid) and guild.get_channel(cid) is not None
 
             if chan_ok(RATING_CHANNEL_ID):
-                lines.append("  `✅` Movie rating channel")
+                lines.append("`✅` Movie rating channel")
             else:
-                lines.append("  `✅` **Movie rating channel** — The configured RATING_CHANNEL_ID is missing or not a valid channel in this guild, so rating posts cannot be created.")
+                lines.append("`⚠️` **Movie rating channel** — The configured RATING_CHANNEL_ID is missing or not a valid channel in this guild, so rating posts cannot be created.")
 
             if chan_ok(QOTD_CHANNEL_ID):
-                lines.append("  `✅` QOTD channel")
+                lines.append("`✅` QOTD channel")
             else:
-                lines.append("  `✅` **QOTD channel** — The configured QOTD_CHANNEL_ID is missing or not a valid channel in this guild, so QOTD messages cannot be delivered.")
+                lines.append("`⚠️` **QOTD channel** — The configured QOTD_CHANNEL_ID is missing or not a valid channel in this guild, so QOTD messages cannot be delivered.")
 
             if chan_ok(BIRTHDAY_STORAGE_CHANNEL_ID):
-                lines.append("  `✅` Birthday storage channel")
+                lines.append("`✅` Birthday storage channel")
             else:
-                lines.append("  `✅` **Birthday storage channel** — The configured BIRTHDAY_STORAGE_CHANNEL_ID is missing or not a valid channel in this guild, so storage messages cannot be maintained.")
+                lines.append("`⚠️` **Birthday storage channel** — The configured BIRTHDAY_STORAGE_CHANNEL_ID is missing or not a valid channel in this guild, so storage messages cannot be maintained.")
 
             if chan_ok(MOVIE_STORAGE_CHANNEL_ID):
-                lines.append("  `✅` Movie storage channel")
+                lines.append("`✅` Movie storage channel")
             else:
-                lines.append("  `✅` **Movie storage channel** — The configured MOVIE_STORAGE_CHANNEL_ID is missing or not a valid channel in this guild, so movie library messages cannot be synced.")
+                lines.append("`⚠️` **Movie storage channel** — The configured MOVIE_STORAGE_CHANNEL_ID is missing or not a valid channel in this guild, so movie library messages cannot be synced.")
 
             birthday_role = guild.get_role(BIRTHDAY_ROLE_ID) if BIRTHDAY_ROLE_ID != 0 else None
             if BIRTHDAY_ROLE_ID == 0:
-                lines.append("  `✅` **Birthday role ID** — BIRTHDAY_ROLE_ID is not configured, so the birthday role cannot be automatically assigned or removed.")
+                lines.append("`⚠️` **Birthday role ID** — BIRTHDAY_ROLE_ID is not configured, so the birthday role cannot be automatically assigned or removed.")
             elif birthday_role is None:
-                lines.append(f"  `✅` **Birthday role lookup** — The configured BIRTHDAY_ROLE_ID ({BIRTHDAY_ROLE_ID}) does not match any role in this guild, so birthday role automation will fail.")
+                lines.append(f"`⚠️` **Birthday role lookup** — The configured BIRTHDAY_ROLE_ID ({BIRTHDAY_ROLE_ID}) does not match any role in this guild, so birthday role automation will fail.")
             else:
-                lines.append(f"  `✅` Birthday role found ({birthday_role.name}, id={BIRTHDAY_ROLE_ID})")
+                lines.append(f"`✅` Birthday role found ({birthday_role.name}, id={BIRTHDAY_ROLE_ID})")
 
             dead_chat_role = None
             if DEAD_CHAT_ROLE_ID != 0:
@@ -313,11 +313,11 @@ async def run_startup_checks():
                 dead_chat_role = discord.utils.get(guild.roles, name=DEAD_CHAT_ROLE_NAME)
 
             if DEAD_CHAT_ROLE_ID == 0 and not DEAD_CHAT_ROLE_NAME:
-                lines.append("  `✅` **Dead Chat role config** — Neither DEAD_CHAT_ROLE_ID nor DEAD_CHAT_ROLE_NAME is configured, so the Dead Chat color cycling command cannot operate.")
+                lines.append("`⚠️` **Dead Chat role config** — Neither DEAD_CHAT_ROLE_ID nor DEAD_CHAT_ROLE_NAME is configured, so the Dead Chat color cycling command cannot operate.")
             elif dead_chat_role is None:
-                lines.append("  `✅` **Dead Chat role lookup** — The configured Dead Chat role ID or name does not match any role in this guild, so color cycling will fail.")
+                lines.append("`⚠️` **Dead Chat role lookup** — The configured Dead Chat role ID or name does not match any role in this guild, so color cycling will fail.")
             else:
-                lines.append(f"  `✅` Dead Chat role found ({dead_chat_role.name}, id={dead_chat_role.id})")
+                lines.append(f"`✅` Dead Chat role found ({dead_chat_role.name}, id={dead_chat_role.id})")
 
             vc_id = 1331501272804884490
             vc_role_id = 1444555985728442390
@@ -325,14 +325,14 @@ async def run_startup_checks():
             vc_role = guild.get_role(vc_role_id)
 
             if vc_channel is None:
-                lines.append(f"  `✅` **VC tracking channel** — The hardcoded VC channel ID {vc_id} does not resolve in this guild, so VC-status role tracking cannot run.")
+                lines.append(f"`⚠️` **VC tracking channel** — The hardcoded VC channel ID {vc_id} does not resolve in this guild, so VC-status role tracking cannot run.")
             else:
-                lines.append(f"  `✅` VC channel found for VC-status role tracking ({vc_channel.name}, id={vc_id})")
+                lines.append(f"`✅` VC channel found for VC-status role tracking ({vc_channel.name}, id={vc_id})")
 
             if vc_role is None:
-                lines.append(f"  `✅` **VC-status role lookup** — The hardcoded VC-status role ID {vc_role_id} does not resolve to a role in this guild, so join/leave role automation will fail.")
+                lines.append(f"`⚠️` **VC-status role lookup** — The hardcoded VC-status role ID {vc_role_id} does not resolve to a role in this guild, so join/leave role automation will fail.")
             else:
-                lines.append(f"  `✅` VC-status role found ({vc_role.name}, id={vc_role_id})")
+                lines.append(f"`✅` VC-status role found ({vc_role.name}, id={vc_role_id})")
 
     text = "\n".join(lines)
     if len(text) > 1900:
