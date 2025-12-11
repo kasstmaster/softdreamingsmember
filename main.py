@@ -1493,7 +1493,7 @@ async def random_pick(ctx):
 
     second_channel = ctx.guild.get_channel(RATING_CHANNEL_ID)
     if second_channel:
-        second_text = f"**{winner_title}**"
+        second_text = f"Rate it @everyone!\n**{winner_title}**"
         msg = await second_channel.send(second_text)
         for emoji in ["😍", "😃", "🙂", "🫤", "😒", "🤢"]:
             await msg.add_reaction(emoji)
