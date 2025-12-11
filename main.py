@@ -106,8 +106,8 @@ QOTD_CHANNEL_ID = _env_int("QOTD_CHANNEL_ID", 0)
 ICON_DEFAULT_URL = os.getenv("ICON_DEFAULT_URL", "")
 ICON_CHRISTMAS_URL = os.getenv("ICON_CHRISTMAS_URL", "")
 ICON_HALLOWEEN_URL = os.getenv("ICON_HALLOWEEN_URL", "")
-CHRISTMAS_THEME_ROLES = {"Sandy Claws": "Admin", "Grinch": "Original Member", "Cranberry": "Member", "Christmas": "Bots"}
-HALLOWEEN_THEME_ROLES = {"Cauldron": "Admin", "Candy": "Original Member", "Witchy": "Member", "Halloween": "Bots"}
+THEME_CHRISTMAS_ROLES = {"Sandy Claws": "Admin", "Grinch": "Original Member", "Cranberry": "Member", "Christmas": "Bots"}
+THEME_HALLOWEEN_ROLES = {"Cauldron": "Admin", "Candy": "Original Member", "Witchy": "Member", "Halloween": "Bots"}
 
 DEAD_CHAT_ROLE_ID = _env_int("DEAD_CHAT_ROLE_ID", 0)
 DEAD_CHAT_ROLE_NAME = os.getenv("DEAD_CHAT_ROLE_NAME", "Dead Chat")
@@ -239,12 +239,12 @@ async def run_startup_checks():
     else:
         lines.append("⚠️ **Theme emoji config** — Theme emoji environment JSON is missing, invalid, or empty, so seasonal emojis cannot be created.")
 
-    if CHRISTMAS_THEME_ROLES:
+    if THEME_CHRISTMAS_ROLES:
         lines.append("✅ Christmas role templates")
     else:
         lines.append("⚠️ **Christmas role templates** — Christmas role mapping is not defined, so seasonal Christmas roles cannot be assigned.")
 
-    if HALLOWEEN_THEME_ROLES:
+    if THEME_HALLOWEEN_ROLES:
         lines.append("✅ Halloween role templates")
     else:
         lines.append("⚠️ **Halloween role templates** — Halloween role mapping is not defined, so seasonal Halloween roles cannot be assigned.")
@@ -730,7 +730,7 @@ async def apply_theme_for_today(guild: discord.Guild, today: str | None = None):
     return mode, removed_roles, removed_emojis, added_roles, added_emojis
 
 async def apply_theme_roles(guild: discord.Guild, theme: str) -> int:
-    role_map = CHRISTMAS_THEME_ROLES if theme == "christmas" else HALLOWEEN_THEME_ROLES
+    role_map = THEME_CHRISTMAS_ROLES if theme == "christmas" else THEME_HALLOWEEN_ROLES
     added = 0
     for color_name, base_keyword in role_map.items():
         color_role = find_role_by_name(guild, color_name)
@@ -750,7 +750,7 @@ async def apply_theme_roles(guild: discord.Guild, theme: str) -> int:
 
 async def clear_theme_roles(guild: discord.Guild) -> int:
     removed = 0
-    for color_name in {**CHRISTMAS_THEME_ROLES, **HALLOWEEN_THEME_ROLES}:
+    for color_name in {**THEME_CHRISTMAS_ROLES, **THEME_HALLOWEEN_ROLES}:
         role = find_role_by_name(guild, color_name)
         if role:
             async for member in guild.fetch_members(limit=None):
@@ -791,7 +791,7 @@ def _load_emoji_config_from_env(env_name: str) -> list[dict]:
 
 def _collect_theme_emoji_names() -> set[str]:
     names: set[str] = set()
-    for env_name in ("CHRISTMAS_THEME_EMOJIS", "HALLOWEEN_THEME_EMOJIS"):
+    for env_name in ("THEME_CHRISTMAS_EMOJIS", "THEME_HALLOWEEN_EMOJIS"):
         config = _load_emoji_config_from_env(env_name)
         for item in config:
             if not isinstance(item, dict):
@@ -802,7 +802,7 @@ def _collect_theme_emoji_names() -> set[str]:
     return names
 
 async def apply_theme_emojis(guild: discord.Guild, theme: str) -> int:
-    env_name = "CHRISTMAS_THEME_EMOJIS" if theme == "christmas" else "HALLOWEEN_THEME_EMOJIS"
+    env_name = "THEME_CHRISTMAS_EMOJIS" if theme == "christmas" else "THEME_HALLOWEEN_EMOJIS"
     config = _load_emoji_config_from_env(env_name)
     if not config:
         print(f"{env_name} is empty or invalid")
