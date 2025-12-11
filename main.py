@@ -1177,10 +1177,24 @@ async def birthday_checker():
 @bot.event
 async def on_ready():
     global startup_logging_done, startup_log_buffer
+
     print(f"{bot.user} is online!")
     bot.add_view(GameNotificationView())
     await run_all_inits_with_logging()
     await log_to_bot_channel(f"Bot ready as {bot.user} in {len(bot.guilds)} guild(s).")
+
+    try:
+        channel = bot.get_channel(BOT_LOG_THREAD_ID) if BOT_LOG_THREAD_ID != 0 else None
+        if channel and startup_log_buffer:
+            big_text = "---------------------------- STARTUP LOGS ----------------------------\n" + "\n".join(startup_log_buffer)
+            if len(big_text) > 1900:
+                big_text = big_text[:1900]
+            await channel.send(big_text)
+    except Exception:
+        pass
+
+    startup_logging_done = True
+    startup_log_buffer = []
 
     await init_last_activity_storage()
     bot.loop.create_task(twitch_watcher())
@@ -1192,10 +1206,6 @@ async def on_ready():
     else:
         await initialize_dead_chat()
 
-    await flush_startup_logs()
-    startup_logging_done = True
-    startup_log_buffer = []
-    
 @bot.event
 async def on_member_join(member):
     try:
