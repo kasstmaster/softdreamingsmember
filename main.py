@@ -328,6 +328,8 @@ async def run_startup_checks():
         else:
             lines.append(f"`⚠️` VC-status role {vc_role_id} not found")
 
+    lines.append("")
+
     text = "\n".join(lines)
     if len(text) > 1900:
         text = text[:1900]
