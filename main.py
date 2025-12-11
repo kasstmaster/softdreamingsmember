@@ -137,7 +137,13 @@ async def log_to_thread(content: str):
         startup_log_buffer.append(content)
         return
     channel = bot.get_channel(BOT_LOG_THREAD_ID)
+    if channel is None and BOT_LOG_THREAD_ID:
+        try:
+            channel = await bot.fetch_channel(BOT_LOG_THREAD_ID)
+        except Exception:
+            channel = None
     if not channel:
+        print(f"[LOG] {content}")
         return
     try:
         await channel.send(content)
@@ -378,12 +384,20 @@ async def run_startup_checks():
     text = "\n".join(lines)
     if len(text) > 1900:
         text = text[:1900]
-    channel = bot.get_channel(BOT_LOG_THREAD_ID) if BOT_LOG_THREAD_ID != 0 else None
     header = "---------------------------- STARTUP LOGS ----------------------------\n"
+    full = header + text
+    channel = bot.get_channel(BOT_LOG_THREAD_ID) if BOT_LOG_THREAD_ID != 0 else None
+    if channel is None and BOT_LOG_THREAD_ID:
+        try:
+            channel = await bot.fetch_channel(BOT_LOG_THREAD_ID)
+        except Exception:
+            channel = None
     if channel:
-        await channel.send(header + text)
+        if len(full) > 1900:
+            full = full[:1900]
+        await channel.send(full)
     else:
-        print(header + text)
+        print(full)
     
 def build_mm_dd(month_name: str, day: int) -> str | None:
     month_num = MONTH_TO_NUM.get(month_name)
@@ -1192,11 +1206,19 @@ async def on_ready():
 
     try:
         channel = bot.get_channel(BOT_LOG_THREAD_ID) if BOT_LOG_THREAD_ID != 0 else None
+        if channel is None and BOT_LOG_THREAD_ID:
+            try:
+                channel = await bot.fetch_channel(BOT_LOG_THREAD_ID)
+            except Exception:
+                channel = None
         if channel and startup_log_buffer:
             big_text = "---------------------------- STARTUP LOGS ----------------------------\n" + "\n".join(startup_log_buffer)
             if len(big_text) > 1900:
                 big_text = big_text[:1900]
             await channel.send(big_text)
+        elif startup_log_buffer:
+            print("---------------------------- STARTUP LOGS ----------------------------")
+            print("\n".join(startup_log_buffer))
     except Exception:
         pass
 
