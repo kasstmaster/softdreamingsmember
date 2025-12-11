@@ -1140,24 +1140,23 @@ async def birthday_checker():
 ############### EVENT HANDLERS ###############
 @bot.event
 async def on_ready():
-    print(f"{bot.user} is online!")
-    bot.add_view(GameNotificationView())
-    await run_all_inits_with_logging()
-    await log_to_bot_channel(f"Bot ready as {bot.user} in {len(bot.guilds)} guild(s).")
-
     global startup_logging_done, startup_log_buffer
-    try:
-        channel = bot.get_channel(BOT_LOG_THREAD_ID) if BOT_LOG_THREAD_ID != 0 else None
-        if channel and startup_log_buffer:
-            big_text = "---------------------------- STARTUP LOGS ----------------------------\n" + "\n".join(startup_log_buffer)
-            if len(big_text) > 1900:
-                big_text = big_text[:1900]
+    print(f"{bot.user} is online!")
+    channel = bot.get_channel(BOT_LOG_THREAD_ID) if BOT_LOG_THREAD_ID != 0 else None
+    if channel and startup_log_buffer:
+        big_text = "---------------------------- STARTUP LOGS ----------------------------\n" + "\n".join(startup_log_buffer)
+        if len(big_text) > 1900:
+            big_text = big_text[:1900]
+        try:
             await channel.send(big_text)
-    except Exception:
-        pass
+        except Exception:
+            pass
     startup_logging_done = True
     startup_log_buffer = []
 
+    bot.add_view(GameNotificationView())
+    await run_all_inits_with_logging()
+    await log_to_bot_channel(f"Bot ready as {bot.user} in {len(bot.guilds)} guild(s).")
     await init_last_activity_storage()
     bot.loop.create_task(twitch_watcher())
     bot.loop.create_task(infected_watcher())
