@@ -1,5 +1,5 @@
 # ============================================================
-# RULES FOR CHATGPT AND GROK (DO NOT VIOLATE)
+# RULES FOR CHATGPT (DO NOT VIOLATE)
 # • Use ONLY these sections, in this exact order:
 #   ############### IMPORTS ###############
 #   ############### CONSTANTS & CONFIG ###############
@@ -155,8 +155,6 @@ async def run_startup_checks():
     global storage_message_id, pool_storage_message_id
 
     lines = []
-    lines.append("Startup check report:")
-    lines.append("")
 
     lines.append("[LOGGING]")
     log_channel = bot.get_channel(BOT_LOG_THREAD_ID) if BOT_LOG_THREAD_ID else None
@@ -331,10 +329,6 @@ async def run_startup_checks():
             lines.append(f"`⚠️` VC-status role {vc_role_id} not found")
 
     lines.append("")
-    lines.append("")
-    lines.append("All systems passed basic storage + runtime checks.")
-    lines.append(f"[STARTUP] Member Bot ready as {bot.user} in {len(bot.guilds)} guild(s).")
-    lines.append("Schedulers started: birthday_checker, qotd_scheduler, theme_scheduler.")
 
     text = "\n".join(lines)
     if len(text) > 1900:
@@ -1080,7 +1074,6 @@ async def qotd_scheduler():
     await bot.wait_until_ready()
     TARGET_HOUR_UTC = 17
     TARGET_MINUTE = 0
-    await log_to_thread("qotd_scheduler started.")
     while not bot.is_closed():
         now = datetime.utcnow()
         if now.hour == TARGET_HOUR_UTC and now.minute == TARGET_MINUTE:
@@ -1095,7 +1088,6 @@ async def theme_scheduler():
     await bot.wait_until_ready()
     TARGET_HOUR_UTC = 9
     TARGET_MINUTE = 0
-    await log_to_thread("theme_scheduler started.")
     while not bot.is_closed():
         now = datetime.utcnow()
         if now.hour == TARGET_HOUR_UTC and now.minute == TARGET_MINUTE:
@@ -1112,7 +1104,6 @@ async def birthday_checker():
     await bot.wait_until_ready()
     TARGET_HOUR_UTC = 15
     TARGET_MINUTE = 0
-    await log_to_thread("birthday_checker started.")
     while not bot.is_closed():
         now = datetime.utcnow()
         if now.hour == TARGET_HOUR_UTC and now.minute == TARGET_MINUTE:
@@ -1143,17 +1134,7 @@ async def on_ready():
     global startup_logging_done, startup_log_buffer
     print(f"{bot.user} is online!")
 
-    channel = bot.get_channel(BOT_LOG_THREAD_ID) if BOT_LOG_THREAD_ID != 0 else None
-    if channel and startup_log_buffer:
-        big_text = "---------------------------- STARTUP LOGS ----------------------------\n" + "\n".join(startup_log_buffer)
-        if len(big_text) > 1900:
-            big_text = big_text[:1900]
-        try:
-            await channel.send(big_text)
-        except Exception:
-            pass
-
-    startup_logging_done = True
+    startup_logging_done = False
     startup_log_buffer = []
 
     await initialize_storage_message()
@@ -1163,7 +1144,27 @@ async def on_ready():
     bot.loop.create_task(theme_scheduler())
     bot.loop.create_task(birthday_checker())
     await run_startup_checks()
-    await log_to_thread(f"on_ready complete for {bot.user} in {len(bot.guilds)} guild(s).")
+
+    startup_log_buffer.append("birthday_checker started.")
+    startup_log_buffer.append("qotd_scheduler started.")
+    startup_log_buffer.append("theme_scheduler started.")
+    startup_log_buffer.append("Schedulers started: birthday_checker, qotd_scheduler, theme_scheduler.")
+    startup_log_buffer.append("")
+    startup_log_buffer.append("All systems passed basic storage + runtime checks.")
+    startup_log_buffer.append(f"Bot ready as {bot.user} in {len(bot.guilds)} guild(s).")
+
+    channel = bot.get_channel(BOT_LOG_THREAD_ID) if BOT_LOG_THREAD_ID != 0 else None
+    if channel:
+        big_text = "---------------------------- STARTUP LOGS ----------------------------\n\n" + "\n".join(startup_log_buffer)
+        if len(big_text) > 1900:
+            big_text = big_text[:1900]
+        try:
+            await channel.send(big_text)
+        except Exception:
+            pass
+
+    startup_logging_done = True
+    startup_log_buffer = []
 
 @bot.event
 async def on_member_join(member):
